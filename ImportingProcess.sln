@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31424.327
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImportingProcess", "ImportingProcess\ImportingProcess.csproj", "{E88A39AB-3B90-4782-BE5E-7A945AA84238}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E88A39AB-3B90-4782-BE5E-7A945AA84238}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E88A39AB-3B90-4782-BE5E-7A945AA84238}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E88A39AB-3B90-4782-BE5E-7A945AA84238}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E88A39AB-3B90-4782-BE5E-7A945AA84238}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {2EB07104-74F4-497B-AC18-F21B3BF6FF7C}
+	EndGlobalSection
+EndGlobal
