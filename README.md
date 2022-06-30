@@ -6,4 +6,3 @@ Benchmark program to study the efficiency of file ingestion processes that may b
 |      SpanCharAsync | 79,258.9 us |  42,706.4 us | 2,340.88 us | 1.056 |    0.06 | 5285.7143 | 2428.5714 | 1285.7143 | 40,398 KB |
 |   YieldReturnAsync |    347.3 us |     200.7 us |    11.00 us | 0.005 |    0.00 |   92.2852 |    1.9531 |         - |    379 KB |
 | StringBuilderAsync |    441.4 us |     277.1 us |    15.19 us | 0.006 |    0.00 |  114.7461 |    0.4883 |         - |    471 KB |
-|    ZStringVerAsync | 78,425.5 us | 107,117.7 us | 5,871.48 us | 1.046 |    0.11 | 5500.0000 | 3000.0000 | 1500.0000 | 40,888 KB |
