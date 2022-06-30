@@ -1,4 +1,6 @@
 ﻿using BenchmarkDotNet.Attributes;
+using Cysharp;
+using Cysharp.Text;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -9,6 +11,7 @@ using System.Threading.Tasks;
 
 namespace ImportingProcess
 {
+    [MarkdownExporterAttribute.GitHub]
     [ShortRunJob]
     [MemoryDiagnoser]
     public class Import01
@@ -31,8 +34,15 @@ namespace ImportingProcess
         }
 
         #region Benchmark
-        [Benchmark]
-        public void FirstVersion()
+        [Benchmark(Baseline = true)]
+        public async Task FirstVersionAsync()
+        {
+            var details = Import();
+            await WriteFileAsync(details);
+            //Console.WriteLine(JsonConvert.SerializeObject(details));
+        }
+
+        private IEnumerable<Detail> Import()
         {
             var details = new List<Detail>();
             var lineNum = 1;
@@ -58,8 +68,7 @@ namespace ImportingProcess
                     }
                 }
             }
-            WriteFile(details);
-            //Console.WriteLine(JsonConvert.SerializeObject(details));
+            return details;
         }
 
         private Detail Convert(int detailID, string header, string detail, string footer)
@@ -71,43 +80,33 @@ namespace ImportingProcess
             {
                 HeaderID = headerID,
                 DetailID = detailID,
-                Header01 = header.Substring(9, 4),
-                Header02 = header.Substring(13, 7),
-                Header03 = header.Substring(20, 5),
-                Header04 = header.Substring(25, 2),
-                Header05 = header.Substring(27, 3),
-                Header06 = header.Substring(30, 3),
-                Header07 = header.Substring(33, 6),
+                Header01 = header.Substring(9, 4).TrimEnd(),
+                Header02 = header.Substring(13, 7).TrimEnd(),
+                Header03 = header.Substring(20, 5).TrimEnd(),
+                Header04 = header.Substring(25, 2).TrimEnd(),
+                Header05 = header.Substring(27, 3).TrimEnd(),
+                Header06 = header.Substring(30, 3).TrimEnd(),
+                Header07 = header.Substring(33, 6).TrimEnd(),
                 Data = detail,
-                Footer01 = footer.Substring(0, 5),
-                Footer02 = footer.Substring(5, 9),
-                Footer03 = footer.Substring(14, 2),
-                Footer04 = footer.Substring(16, 3),
-                Footer05 = footer.Substring(19, 8),
-                Footer06 = footer.Substring(27, 5),
-                Footer07 = footer.Substring(32, 3),
-                Footer08 = footer.Substring(35, 4),
+                Footer01 = footer.Substring(0, 5).TrimEnd(),
+                Footer02 = footer.Substring(5, 9).TrimEnd(),
+                Footer03 = footer.Substring(14, 2).TrimEnd(),
+                Footer04 = footer.Substring(16, 3).TrimEnd(),
+                Footer05 = footer.Substring(19, 8).TrimEnd(),
+                Footer06 = footer.Substring(27, 5).TrimEnd(),
+                Footer07 = footer.Substring(32, 3).TrimEnd(),
+                Footer08 = footer.Substring(35, 4).TrimEnd(),
             };
         }
-        private void WriteFile(IEnumerable<Detail> details)
+
+        private async Task WriteFileAsync(IEnumerable<Detail> details)
         {
             using (var sw = new StreamWriter(OUTPUT_FILE, false, _enc))
             {
                 foreach (var d in details)
                 {
-                    sw.Write($"{d.HeaderID}");
-                    sw.Write(",");
-                    sw.Write($"{d.DetailID:000}");
-                    sw.Write(",");
-                    sw.Write($"{d.Header01}");
-                    sw.Write($"{d.Header02}");
-                    sw.Write($"{d.Header03}");
-                    sw.Write($"{d.Header04}");
-                    sw.Write($"{d.Footer01}");
-                    sw.Write($"{d.Footer02}");
-                    sw.Write(",");
-                    sw.Write($"{d.Data}");
-                    sw.WriteLine();
+                    var line = $"{d.HeaderID},{d.DetailID:000},{d.Data},{d.Header01}{d.Header02}{d.Header03}{d.Header04}{d.Header05}{d.Header06}{d.Header07}{d.Footer01}{d.Footer02}{d.Footer03}{d.Footer04}{d.Footer05}{d.Footer06}{d.Footer07}{d.Footer08}";
+                    await sw.WriteLineAsync(line);
                 }
             }
         }
@@ -115,7 +114,14 @@ namespace ImportingProcess
 
         #region ReadOnlySpan<char>
         [Benchmark]
-        public void SpanChar()
+        public async Task SpanCharAsync()
+        {
+            var details = ImportSpan();
+            await WriteFileAsync(details);
+            //Console.WriteLine(JsonConvert.SerializeObject(details));
+        }
+
+        private IEnumerable<Detail> ImportSpan()
         {
             var details = new List<Detail>();
             var lineNum = 1;
@@ -141,9 +147,9 @@ namespace ImportingProcess
                     }
                 }
             }
-            WriteFile(details);
-            //Console.WriteLine(JsonConvert.SerializeObject(details));
+            return details;
         }
+
         private Detail ConvertSpan(int detailID, ReadOnlySpan<char> header, ReadOnlySpan<char> detail, ReadOnlySpan<char> footer)
         {
             if (!int.TryParse(header.Slice(0, 9), out var headerID))
@@ -153,35 +159,35 @@ namespace ImportingProcess
             {
                 HeaderID = headerID,
                 DetailID = detailID,
-                Header01 = header.Slice(9, 4).ToString(),
-                Header02 = header.Slice(13, 7).ToString(),
-                Header03 = header.Slice(20, 5).ToString(),
-                Header04 = header.Slice(25, 2).ToString(),
-                Header05 = header.Slice(27, 3).ToString(),
-                Header06 = header.Slice(30, 3).ToString(),
-                Header07 = header.Slice(33, 6).ToString(),
+                Header01 = header.Slice(9, 4).TrimEnd().ToString(),
+                Header02 = header.Slice(13, 7).TrimEnd().ToString(),
+                Header03 = header.Slice(20, 5).TrimEnd().ToString(),
+                Header04 = header.Slice(25, 2).TrimEnd().ToString(),
+                Header05 = header.Slice(27, 3).TrimEnd().ToString(),
+                Header06 = header.Slice(30, 3).TrimEnd().ToString(),
+                Header07 = header.Slice(33, 6).TrimEnd().ToString(),
                 Data = detail.ToString(),
-                Footer01 = footer.Slice(0, 5).ToString(),
-                Footer02 = footer.Slice(5, 9).ToString(),
-                Footer03 = footer.Slice(14, 2).ToString(),
-                Footer04 = footer.Slice(16, 3).ToString(),
-                Footer05 = footer.Slice(19, 8).ToString(),
-                Footer06 = footer.Slice(27, 5).ToString(),
-                Footer07 = footer.Slice(32, 3).ToString(),
-                Footer08 = footer.Slice(35, 4).ToString(),
+                Footer01 = footer.Slice(0, 5).TrimEnd().ToString(),
+                Footer02 = footer.Slice(5, 9).TrimEnd().ToString(),
+                Footer03 = footer.Slice(14, 2).TrimEnd().ToString(),
+                Footer04 = footer.Slice(16, 3).TrimEnd().ToString(),
+                Footer05 = footer.Slice(19, 8).TrimEnd().ToString(),
+                Footer06 = footer.Slice(27, 5).TrimEnd().ToString(),
+                Footer07 = footer.Slice(32, 3).TrimEnd().ToString(),
+                Footer08 = footer.Slice(35, 4).TrimEnd().ToString(),
             };
         }
         #endregion
 
         #region yield
         [Benchmark]
-        public void YieldReturn()
+        public async Task YieldReturnAsync()
         {
-            var details = Import();
-            WriteFile(details);
+            var details = ImportYield();
+            await WriteFileAsync(details);
         }
 
-        private IEnumerable<Detail> Import()
+        private IEnumerable<Detail> ImportYield()
         {
             var lineNum = 1;
             using (var sr = new StreamReader(INPUT_FILE, _enc))
@@ -211,6 +217,95 @@ namespace ImportingProcess
             }
         }
         #endregion
+
+        #region StringBuilder
+        [Benchmark]
+        public async Task StringBuilderAsync()
+        {
+            var details = ImportYield();
+            await WriteFileStringBuilderAsync(details);
+        }
+
+        private async Task WriteFileStringBuilderAsync(IEnumerable<Detail> details)
+        {
+            using (var sw = new StreamWriter(OUTPUT_FILE, false, _enc))
+            {
+                foreach (var d in details)
+                {
+                    var sb = new StringBuilder();
+                    sb.Append(d.HeaderID);
+                    sb.Append(",");
+                    sb.AppendFormat("000", d.DetailID);
+                    sb.Append(",");
+                    sb.Append(d.Data);
+                    sb.Append(",");
+                    sb.Append(d.Header01);
+                    sb.Append(d.Header02);
+                    sb.Append(d.Header03);
+                    sb.Append(d.Header04);
+                    sb.Append(d.Header05);
+                    sb.Append(d.Header06);
+                    sb.Append(d.Header07);
+                    sb.Append(d.Footer01);
+                    sb.Append(d.Footer02);
+                    sb.Append(d.Footer03);
+                    sb.Append(d.Footer04);
+                    sb.Append(d.Footer05);
+                    sb.Append(d.Footer06);
+                    sb.Append(d.Footer07);
+                    sb.Append(d.Footer08);
+                    sb.AppendLine();
+                    await sw.WriteLineAsync(sb);
+                }
+            }
+        }
+        #endregion
+
+
+        #region ZString
+        [Benchmark]
+        public async Task ZStringVerAsync()
+        {
+            var details = Import();
+            await WriteFileZString(details);
+        }
+        private async Task WriteFileZString(IEnumerable<Detail> details)
+        {
+            using (var sw = new StreamWriter(OUTPUT_FILE, false, _enc))
+            {
+                    foreach (var d in details)
+                {
+                    using (var sb = ZString.CreateStringBuilder())
+                    {
+                        sb.Append(d.HeaderID);
+                        sb.Append(",");
+                        sb.AppendFormat("000", d.DetailID);
+                        sb.Append(",");
+                        sb.Append(d.Data);
+                        sb.Append(",");
+                        sb.Append(d.Header01.AsSpan());
+                        sb.Append(d.Header02.AsSpan());
+                        sb.Append(d.Header03.AsSpan());
+                        sb.Append(d.Header04.AsSpan());
+                        sb.Append(d.Header05.AsSpan());
+                        sb.Append(d.Header06.AsSpan());
+                        sb.Append(d.Header07.AsSpan());
+                        sb.Append(d.Footer01.AsSpan());
+                        sb.Append(d.Footer02.AsSpan());
+                        sb.Append(d.Footer03.AsSpan());
+                        sb.Append(d.Footer04.AsSpan());
+                        sb.Append(d.Footer05.AsSpan());
+                        sb.Append(d.Footer06.AsSpan());
+                        sb.Append(d.Footer07.AsSpan());
+                        sb.Append(d.Footer08.AsSpan());
+                        sb.AppendLine();
+                        await sw.WriteLineAsync(sb.AsMemory());
+                    }
+                }
+            }
+        }
+        #endregion
+
     }
 
     public class Detail
