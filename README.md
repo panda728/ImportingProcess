@@ -1,9 +1,9 @@
 # ImportingProcess
 Benchmark program to study the efficiency of file ingestion processes that may be found in Japanese business systems.
-|             Method |       Mean |        Error |      StdDev |   Median | Ratio | RatioSD |   Gen 0 |   Gen 1 | Allocated |
-|------------------- |-----------:|-------------:|------------:|---------:|------:|--------:|--------:|--------:|----------:|
-|  FirstVersionAsync |   770.9 us |    212.91 us |    11.67 us | 768.5 us |  1.00 |    0.00 | 69.3359 | 27.3438 |    303 KB |
-|      SpanCharAsync |   758.0 us |     89.20 us |     4.89 us | 755.6 us |  0.98 |    0.02 | 66.4063 | 25.3906 |    287 KB |
-|   YieldReturnAsync |   887.0 us |  1,949.90 us |   106.88 us | 931.0 us |  1.15 |    0.12 | 68.3594 |  0.9766 |    279 KB |
-| StringBuilderAsync |   996.7 us |    432.29 us |    23.70 us | 989.1 us |  1.29 |    0.04 | 89.8438 |  3.9063 |    373 KB |
-|    ZStringVerAsync | 1,523.7 us | 19,234.73 us | 1,054.32 us | 923.4 us |  1.96 |    1.33 | 54.6875 | 23.4375 |    246 KB |
+|             Method |        Mean |        Error |      StdDev | Ratio | RatioSD |     Gen 0 |     Gen 1 |     Gen 2 | Allocated |
+|------------------- |------------:|-------------:|------------:|------:|--------:|----------:|----------:|----------:|----------:|
+|  FirstVersionAsync | 75,189.4 us |  69,593.9 us | 3,814.67 us | 1.000 |    0.00 | 5571.4286 | 2857.1429 | 1571.4286 | 40,946 KB |
+|      SpanCharAsync | 79,258.9 us |  42,706.4 us | 2,340.88 us | 1.056 |    0.06 | 5285.7143 | 2428.5714 | 1285.7143 | 40,398 KB |
+|   YieldReturnAsync |    347.3 us |     200.7 us |    11.00 us | 0.005 |    0.00 |   92.2852 |    1.9531 |         - |    379 KB |
+| StringBuilderAsync |    441.4 us |     277.1 us |    15.19 us | 0.006 |    0.00 |  114.7461 |    0.4883 |         - |    471 KB |
+|    ZStringVerAsync | 78,425.5 us | 107,117.7 us | 5,871.48 us | 1.046 |    0.11 | 5500.0000 | 3000.0000 | 1500.0000 | 40,888 KB |
