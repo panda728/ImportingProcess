@@ -273,7 +273,7 @@ namespace ImportingProcess
         {
             using (var sw = new StreamWriter(OUTPUT_FILE, false, _enc))
             {
-                    foreach (var d in details)
+                foreach (var d in details)
                 {
                     using (var sb = ZString.CreateStringBuilder())
                     {
@@ -281,7 +281,7 @@ namespace ImportingProcess
                         sb.Append(",");
                         sb.AppendFormat("000", d.DetailID);
                         sb.Append(",");
-                        sb.Append(d.Data);
+                        sb.Append(d.Data.AsSpan());
                         sb.Append(",");
                         sb.Append(d.Header01.AsSpan());
                         sb.Append(d.Header02.AsSpan());
