@@ -29,7 +29,7 @@ namespace ImportingProcess
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             _enc = Encoding.GetEncoding("shift-jis");
             //_input = File.ReadAllBytes(INPUT_FILE);
-            _input = Enumerable.Repeat(File.ReadAllBytes(INPUT_FILE), 1000).SelectMany(x => x).ToArray();
+            _input = Enumerable.Repeat(File.ReadAllBytes(INPUT_FILE), 100).SelectMany(x => x).ToArray();
         }
 
         #region Benchmark
