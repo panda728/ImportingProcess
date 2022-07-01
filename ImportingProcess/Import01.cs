@@ -29,12 +29,12 @@ namespace ImportingProcess
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             _enc = Encoding.GetEncoding("shift-jis");
             //_input = File.ReadAllBytes(INPUT_FILE);
-            _input = Enumerable.Repeat(File.ReadAllBytes(INPUT_FILE), 100).SelectMany(x => x).ToArray();
+            _input = Enumerable.Repeat(File.ReadAllBytes(INPUT_FILE), 1000).SelectMany(x => x).ToArray();
         }
 
         #region Benchmark
         [Benchmark(Baseline = true)]
-        public async Task FirstVersionAsync()
+        public async Task BaselineAsync()
         {
             var details = Import();
             await WriteFileAsync(details);
@@ -262,27 +262,6 @@ namespace ImportingProcess
         }
         #endregion
 
-        public class Row
-        {
-            public int HeaderID { get; set; }
-            public int DetailID { get; set; }
-            public string Header01 { get; set; }
-            public string Header02 { get; set; }
-            public string Header03 { get; set; }
-            public string Header04 { get; set; }
-            public string Header05 { get; set; }
-            public string Header06 { get; set; }
-            public string Header07 { get; set; }
-            public string Data { get; set; }
-            public string Footer01 { get; set; }
-            public string Footer02 { get; set; }
-            public string Footer03 { get; set; }
-            public string Footer04 { get; set; }
-            public string Footer05 { get; set; }
-            public string Footer06 { get; set; }
-            public string Footer07 { get; set; }
-            public string Footer08 { get; set; }
-        }
     }
 
 }
