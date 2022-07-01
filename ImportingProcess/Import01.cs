@@ -1,5 +1,4 @@
 ﻿using BenchmarkDotNet.Attributes;
-using Cysharp.Text;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -30,7 +29,7 @@ namespace ImportingProcess
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             _enc = Encoding.GetEncoding("shift-jis");
             //_input = File.ReadAllBytes(INPUT_FILE);
-            _input = Enumerable.Repeat(File.ReadAllBytes(INPUT_FILE), 100).SelectMany(x => x).ToArray();
+            _input = Enumerable.Repeat(File.ReadAllBytes(INPUT_FILE), 1000).SelectMany(x => x).ToArray();
         }
 
         #region Benchmark
@@ -74,7 +73,7 @@ namespace ImportingProcess
 
         private Row Convert(int detailID, string header, string detail, string footer)
         {
-            if (!int.TryParse(header.Substring(0, 9), out var headerID))
+            if (!int.TryParse(header.AsSpan(0, 9), out var headerID))
                 throw new ApplicationException("Could not be converted to int.");
 
             return new Row()
@@ -236,11 +235,11 @@ namespace ImportingProcess
                 {
                     var sb = new StringBuilder();
                     sb.Append(d.HeaderID);
-                    sb.Append(",");
+                    sb.Append(',');
                     sb.AppendFormat("000", d.DetailID);
-                    sb.Append(",");
+                    sb.Append(',');
                     sb.Append(d.Data);
-                    sb.Append(",");
+                    sb.Append(',');
                     sb.Append(d.Header01);
                     sb.Append(d.Header02);
                     sb.Append(d.Header03);
@@ -262,27 +261,28 @@ namespace ImportingProcess
             }
         }
         #endregion
+
+        public class Row
+        {
+            public int HeaderID { get; set; }
+            public int DetailID { get; set; }
+            public string Header01 { get; set; }
+            public string Header02 { get; set; }
+            public string Header03 { get; set; }
+            public string Header04 { get; set; }
+            public string Header05 { get; set; }
+            public string Header06 { get; set; }
+            public string Header07 { get; set; }
+            public string Data { get; set; }
+            public string Footer01 { get; set; }
+            public string Footer02 { get; set; }
+            public string Footer03 { get; set; }
+            public string Footer04 { get; set; }
+            public string Footer05 { get; set; }
+            public string Footer06 { get; set; }
+            public string Footer07 { get; set; }
+            public string Footer08 { get; set; }
+        }
     }
 
-    public class Row
-    {
-        public int HeaderID { get; set; }
-        public int DetailID { get; set; }
-        public string Header01 { get; set; }
-        public string Header02 { get; set; }
-        public string Header03 { get; set; }
-        public string Header04 { get; set; }
-        public string Header05 { get; set; }
-        public string Header06 { get; set; }
-        public string Header07 { get; set; }
-        public string Data { get; set; }
-        public string Footer01 { get; set; }
-        public string Footer02 { get; set; }
-        public string Footer03 { get; set; }
-        public string Footer04 { get; set; }
-        public string Footer05 { get; set; }
-        public string Footer06 { get; set; }
-        public string Footer07 { get; set; }
-        public string Footer08 { get; set; }
-    }
 }
