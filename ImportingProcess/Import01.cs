@@ -1,7 +1,5 @@
 ﻿using BenchmarkDotNet.Attributes;
-using Cysharp;
 using Cysharp.Text;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -17,7 +15,6 @@ namespace ImportingProcess
     public class Import01
     {
         const string INPUT_FILE = @"data01.txt";
-        const string OUTPUT_FILE = @"output.txt";
         const int HEADER_LEN = 39;
         const int DETAIL_LEN = 10;
         const int DETAIL_COUNT = 10;
@@ -26,11 +23,14 @@ namespace ImportingProcess
         readonly int _footerOffset = HEADER_LEN + DETAIL_LEN * DETAIL_COUNT;
         readonly int _totalLength = HEADER_LEN + DETAIL_LEN * DETAIL_COUNT + FOOTER_LEN;
         readonly Encoding _enc;
+        readonly byte[] _input;
 
         public Import01()
         {
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             _enc = Encoding.GetEncoding("shift-jis");
+            //_input = File.ReadAllBytes(INPUT_FILE);
+            _input = Enumerable.Repeat(File.ReadAllBytes(INPUT_FILE), 100).SelectMany(x => x).ToArray();
         }
 
         #region Benchmark
@@ -42,11 +42,11 @@ namespace ImportingProcess
             //Console.WriteLine(JsonConvert.SerializeObject(details));
         }
 
-        private IEnumerable<Detail> Import()
+        private IEnumerable<Row> Import()
         {
-            var details = new List<Detail>();
+            var details = new List<Row>();
             var lineNum = 1;
-            using (var sr = new StreamReader(INPUT_FILE, _enc))
+            using (var sr = new StreamReader(new MemoryStream(_input), _enc))
             {
                 while (!sr.EndOfStream)
                 {
@@ -59,6 +59,7 @@ namespace ImportingProcess
 
                     var header = line.Substring(0, HEADER_LEN);
                     var footer = line.Substring(_footerOffset, FOOTER_LEN);
+
                     var offset = HEADER_LEN;
                     for (int i = 0; i < DETAIL_COUNT; i++)
                     {
@@ -71,12 +72,12 @@ namespace ImportingProcess
             return details;
         }
 
-        private Detail Convert(int detailID, string header, string detail, string footer)
+        private Row Convert(int detailID, string header, string detail, string footer)
         {
             if (!int.TryParse(header.Substring(0, 9), out var headerID))
                 throw new ApplicationException("Could not be converted to int.");
 
-            return new Detail()
+            return new Row()
             {
                 HeaderID = headerID,
                 DetailID = detailID,
@@ -99,9 +100,9 @@ namespace ImportingProcess
             };
         }
 
-        private async Task WriteFileAsync(IEnumerable<Detail> details)
+        private async Task WriteFileAsync(IEnumerable<Row> details)
         {
-            using (var sw = new StreamWriter(OUTPUT_FILE, false, _enc))
+            using (var sw = new StreamWriter(new MemoryStream(), _enc))
             {
                 foreach (var d in details)
                 {
@@ -121,11 +122,11 @@ namespace ImportingProcess
             //Console.WriteLine(JsonConvert.SerializeObject(details));
         }
 
-        private IEnumerable<Detail> ImportSpan()
+        private IEnumerable<Row> ImportSpan()
         {
-            var details = new List<Detail>();
+            var details = new List<Row>();
             var lineNum = 1;
-            using (var sr = new StreamReader(INPUT_FILE, _enc))
+            using (var sr = new StreamReader(new MemoryStream(_input), _enc))
             {
                 while (!sr.EndOfStream)
                 {
@@ -136,8 +137,9 @@ namespace ImportingProcess
                     if (string.IsNullOrEmpty(line))
                         break;
 
-                    var header = line.AsSpan().Slice(0, HEADER_LEN);
+                    var header = line.AsSpan()[0..HEADER_LEN];
                     var footer = line.AsSpan().Slice(_footerOffset, FOOTER_LEN);
+
                     var offset = HEADER_LEN;
                     for (int i = 0; i < DETAIL_COUNT; i++)
                     {
@@ -150,12 +152,12 @@ namespace ImportingProcess
             return details;
         }
 
-        private Detail ConvertSpan(int detailID, ReadOnlySpan<char> header, ReadOnlySpan<char> detail, ReadOnlySpan<char> footer)
+        private Row ConvertSpan(int detailID, ReadOnlySpan<char> header, ReadOnlySpan<char> detail, ReadOnlySpan<char> footer)
         {
             if (!int.TryParse(header.Slice(0, 9), out var headerID))
                 throw new ApplicationException("Could not be converted to int.");
 
-            return new Detail()
+            return new Row()
             {
                 HeaderID = headerID,
                 DetailID = detailID,
@@ -187,10 +189,10 @@ namespace ImportingProcess
             await WriteFileAsync(details);
         }
 
-        private IEnumerable<Detail> ImportYield()
+        private IEnumerable<Row> ImportYield()
         {
             var lineNum = 1;
-            using (var sr = new StreamReader(INPUT_FILE, _enc))
+            using (var sr = new StreamReader(new MemoryStream(_input), _enc))
             {
                 while (!sr.EndOfStream)
                 {
@@ -207,7 +209,7 @@ namespace ImportingProcess
                         var span = line.AsSpan();
                         yield return ConvertSpan(
                             i + 1,
-                            span.Slice(0, HEADER_LEN),
+                            span[..HEADER_LEN],
                             span.Slice(offset, DETAIL_LEN),
                             span.Slice(_footerOffset, FOOTER_LEN)
                         );
@@ -226,9 +228,9 @@ namespace ImportingProcess
             await WriteFileStringBuilderAsync(details);
         }
 
-        private async Task WriteFileStringBuilderAsync(IEnumerable<Detail> details)
+        private async Task WriteFileStringBuilderAsync(IEnumerable<Row> details)
         {
-            using (var sw = new StreamWriter(OUTPUT_FILE, false, _enc))
+            using (var sw = new StreamWriter(new MemoryStream(), _enc))
             {
                 foreach (var d in details)
                 {
@@ -260,55 +262,9 @@ namespace ImportingProcess
             }
         }
         #endregion
-
-
-        #region ZString
-        [Benchmark]
-        public async Task ZStringVerAsync()
-        {
-            var details = Import();
-            await WriteFileZString(details);
-        }
-        private async Task WriteFileZString(IEnumerable<Detail> details)
-        {
-            using (var sw = new StreamWriter(OUTPUT_FILE, false, _enc))
-            {
-                foreach (var d in details)
-                {
-                    using (var sb = ZString.CreateStringBuilder())
-                    {
-                        sb.Append(d.HeaderID);
-                        sb.Append(",");
-                        sb.AppendFormat("000", d.DetailID);
-                        sb.Append(",");
-                        sb.Append(d.Data.AsSpan());
-                        sb.Append(",");
-                        sb.Append(d.Header01.AsSpan());
-                        sb.Append(d.Header02.AsSpan());
-                        sb.Append(d.Header03.AsSpan());
-                        sb.Append(d.Header04.AsSpan());
-                        sb.Append(d.Header05.AsSpan());
-                        sb.Append(d.Header06.AsSpan());
-                        sb.Append(d.Header07.AsSpan());
-                        sb.Append(d.Footer01.AsSpan());
-                        sb.Append(d.Footer02.AsSpan());
-                        sb.Append(d.Footer03.AsSpan());
-                        sb.Append(d.Footer04.AsSpan());
-                        sb.Append(d.Footer05.AsSpan());
-                        sb.Append(d.Footer06.AsSpan());
-                        sb.Append(d.Footer07.AsSpan());
-                        sb.Append(d.Footer08.AsSpan());
-                        sb.AppendLine();
-                        await sw.WriteLineAsync(sb.AsMemory());
-                    }
-                }
-            }
-        }
-        #endregion
-
     }
 
-    public class Detail
+    public class Row
     {
         public int HeaderID { get; set; }
         public int DetailID { get; set; }
