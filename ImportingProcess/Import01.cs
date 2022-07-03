@@ -36,7 +36,7 @@ namespace ImportingProcess
 
         #region Benchmark
         [Benchmark(Baseline = true)]
-        public async Task BaseLineAsync()
+        public async Task ListAsync()
         {
             await _baseLine.RunAsync();
         }
