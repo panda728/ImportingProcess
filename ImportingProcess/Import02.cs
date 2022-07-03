@@ -26,7 +26,7 @@ namespace ImportingProcess
         readonly int _totalLengthByte = HEADER_BYTE_LEN + DETAIL_BYTE_LEN * DETAIL_COUNT + FOOTER_BYTE_LEN + 2;
         readonly Encoding _enc;
         readonly byte[] _input;
-        BaseLine _baseLine;
+        readonly BaseLine _baseLine;
 
         public Import02()
         {
