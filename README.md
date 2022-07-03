@@ -4,10 +4,11 @@ Benchmark program to study the efficiency of file ingestion processes that may b
 ver2. Result
 |         Method |     Mean |    Error |   StdDev | Ratio | RatioSD |      Gen 0 |      Gen 1 |     Gen 2 | Allocated |
 |--------------- |---------:|---------:|---------:|------:|--------:|-----------:|-----------:|----------:|----------:|
-|      ListAsync | 715.5 ms | 336.0 ms | 18.42 ms |  1.00 |    0.00 | 51000.0000 | 17000.0000 | 4000.0000 |    375 MB |
-|   RowByteAsync | 171.4 ms | 705.9 ms | 38.69 ms |  0.24 |    0.06 | 29000.0000 |          - |         - |    116 MB |
-| RowMemoryAsync | 166.9 ms | 778.2 ms | 42.66 ms |  0.23 |    0.06 | 15000.0000 |          - |         - |     61 MB |
-| PipelinesAsync | 169.1 ms | 695.2 ms | 38.11 ms |  0.24 |    0.06 | 14000.0000 |          - |         - |     56 MB |
+|      ListAsync | 699.0 ms | 108.6 ms |  5.95 ms |  1.00 |    0.00 | 51000.0000 | 17000.0000 | 4000.0000 |    375 MB |
+|   RowByteAsync | 178.6 ms | 815.7 ms | 44.71 ms |  0.26 |    0.07 | 29750.0000 |          - |         - |    119 MB |
+| RowMemoryAsync | 174.7 ms | 711.5 ms | 39.00 ms |  0.25 |    0.06 | 16000.0000 |          - |         - |     64 MB |
+| PipelinesAsync | 171.5 ms | 850.5 ms | 46.62 ms |  0.25 |    0.07 | 14750.0000 |          - |         - |     59 MB |
+
 
 
 ver1.　Result
@@ -17,3 +18,4 @@ ver1.　Result
 |      SpanCharAsync | 727.9 ms | 178.0 ms | 9.76 ms |  0.99 |    0.02 | 50000.0000 | 16000.0000 | 4000.0000 |    370 MB |
 |   YieldReturnAsync | 325.7 ms | 160.3 ms | 8.79 ms |  0.44 |    0.01 | 65000.0000 |  2000.0000 | 2000.0000 |    362 MB |
 | StringBuilderAsync | 366.8 ms | 124.9 ms | 6.84 ms |  0.50 |    0.01 | 88000.0000 |  2000.0000 | 2000.0000 |    452 MB |
+
