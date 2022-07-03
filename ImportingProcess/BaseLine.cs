@@ -22,6 +22,7 @@ namespace ImportingProcess
 
         readonly Encoding _enc;
         readonly byte[] _input;
+        int _lineNum = 0;
 
         public BaseLine(byte[] input)
         {
@@ -32,30 +33,31 @@ namespace ImportingProcess
 
         public async Task RunAsync()
         {
+            _lineNum = 0;
             var input = new MemoryStream(_input);
             var output = new MemoryStream();
             var details = Import(input);
-            var lineCount = await WriteFileAsync(output, details);
+            await WriteFileAsync(output, details);
 
 #if DEBUG
             Console.WriteLine(_enc.GetString(output.ToArray()));
             File.WriteAllBytes("output.txt", output.ToArray());
             Console.WriteLine();
-            Console.WriteLine(lineCount);
+            Console.WriteLine(_lineNum);
 #endif
         }
 
         private IEnumerable<Row> Import(Stream st)
         {
             var details = new List<Row>();
-            var lineNum = 1;
             using (var sr = new StreamReader(st, _enc))
             {
                 while (!sr.EndOfStream)
                 {
+                    _lineNum++;
                     var line = sr.ReadLine();
                     if (line.Length != _totalLength)
-                        throw new ApplicationException($"Data length differs line:{lineNum}");
+                        throw new ApplicationException($"Data length differs line:{_lineNum}");
 
                     if (string.IsNullOrEmpty(line))
                         break;
@@ -103,18 +105,15 @@ namespace ImportingProcess
             };
         }
 
-        private async Task<int> WriteFileAsync(Stream output, IEnumerable<Row> details)
+        private async Task WriteFileAsync(Stream output, IEnumerable<Row> details)
         {
-            var count = 0;
             using (var sw = new StreamWriter(output, _enc))
             {
                 foreach (var d in details)
                 {
                     var line = $"{d.HeaderID},{d.DetailID:000},{d.Data},{d.Header01}{d.Header02}{d.Header03}{d.Header04}{d.Header05}{d.Header06}{d.Header07}{d.Footer01}{d.Footer02}{d.Footer03}{d.Footer04}{d.Footer05}{d.Footer06}{d.Footer07}{d.Footer08}";
                     await sw.WriteLineAsync(line);
-                    count++;
                 }
-                return count;
             }
         }
     }

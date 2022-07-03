@@ -84,11 +84,15 @@ namespace ImportingProcess
                 if (buffer.Last() == (byte)'\r')
                     throw new ApplicationException("\r not found");
 
+                _lineNum++;
+                if (!int.TryParse(_enc.GetString(buffer.AsSpan(0, 9)), out var headerID))
+                    throw new ApplicationException("Could not be converted to int.");
+
                 var offset = HEADER_BYTE_LEN;
                 for (int i = 0; i < DETAIL_COUNT; i++)
                 {
                     yield return new RowByte(
-                        _lineNum++,
+                        headerID,
                         i,
                         buffer.AsSpan()[..HEADER_BYTE_LEN].ToArray(),
                         buffer.AsSpan().Slice(offset, DETAIL_BYTE_LEN).ToArray(),
@@ -188,11 +192,15 @@ namespace ImportingProcess
                 if (buffer.Last() == (byte)'\r')
                     throw new ApplicationException("\r not found");
 
+                _lineNum++;
+                if (!int.TryParse(_enc.GetString(buffer.AsSpan(0, 9)), out var headerID))
+                    throw new ApplicationException("Could not be converted to int.");
+
                 var offset = HEADER_BYTE_LEN;
                 for (int i = 0; i < DETAIL_COUNT; i++)
                 {
                     yield return new RowMemory(
-                        _lineNum++,
+                        headerID,
                         i,
                         buffer.AsMemory()[..HEADER_BYTE_LEN],
                         buffer.AsMemory().Slice(offset, DETAIL_BYTE_LEN),
@@ -347,11 +355,15 @@ namespace ImportingProcess
 
         private IEnumerable<RowMemory> ParseRows(ReadOnlyMemory<byte> segment)
         {
+            _lineNum++;
+            if (!int.TryParse(_enc.GetString(segment.Slice(0, 9).Span), out var headerID))
+                throw new ApplicationException("Could not be converted to int.");
+
             var offset = HEADER_BYTE_LEN;
             for (int i = 0; i < DETAIL_COUNT; i++)
             {
                 yield return new RowMemory(
-                    _lineNum++,
+                    headerID,
                     i,
                     segment[..HEADER_BYTE_LEN],
                     segment.Slice(offset, DETAIL_BYTE_LEN),
