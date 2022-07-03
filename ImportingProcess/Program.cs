@@ -6,7 +6,10 @@ using System.Text;
 #if DEBUG
 //var test = new Import01();
 var test = new Import02();
-await test.RowByteAsync();
+//await test.ListAsync();
+//await test.RowByteAsync();
+//await test.RowMemoryAsync();
+await test.PipelinesAsync();
 Console.WriteLine("Press any key...");
 Console.ReadLine();
 #else

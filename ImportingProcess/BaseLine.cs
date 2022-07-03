@@ -32,16 +32,24 @@ namespace ImportingProcess
 
         public async Task RunAsync()
         {
-            var details = Import();
-            await WriteFileAsync(details);
-            //Console.WriteLine(JsonConvert.SerializeObject(details));
+            var input = new MemoryStream(_input);
+            var output = new MemoryStream();
+            var details = Import(input);
+            var lineCount = await WriteFileAsync(output, details);
+
+#if DEBUG
+            Console.WriteLine(_enc.GetString(output.ToArray()));
+            File.WriteAllBytes("output.txt", output.ToArray());
+            Console.WriteLine();
+            Console.WriteLine(lineCount);
+#endif
         }
 
-        private IEnumerable<Row> Import()
+        private IEnumerable<Row> Import(Stream st)
         {
             var details = new List<Row>();
             var lineNum = 1;
-            using (var sr = new StreamReader(new MemoryStream(_input), _enc))
+            using (var sr = new StreamReader(st, _enc))
             {
                 while (!sr.EndOfStream)
                 {
@@ -95,15 +103,18 @@ namespace ImportingProcess
             };
         }
 
-        private async Task WriteFileAsync(IEnumerable<Row> details)
+        private async Task<int> WriteFileAsync(Stream output, IEnumerable<Row> details)
         {
-            using (var sw = new StreamWriter(new MemoryStream(), _enc))
+            var count = 0;
+            using (var sw = new StreamWriter(output, _enc))
             {
                 foreach (var d in details)
                 {
                     var line = $"{d.HeaderID},{d.DetailID:000},{d.Data},{d.Header01}{d.Header02}{d.Header03}{d.Header04}{d.Header05}{d.Header06}{d.Header07}{d.Footer01}{d.Footer02}{d.Footer03}{d.Footer04}{d.Footer05}{d.Footer06}{d.Footer07}{d.Footer08}";
                     await sw.WriteLineAsync(line);
+                    count++;
                 }
+                return count;
             }
         }
     }

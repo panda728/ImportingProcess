@@ -4,7 +4,9 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Pipelines;
 using System.Linq;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -27,19 +29,28 @@ namespace ImportingProcess
         readonly Encoding _enc;
         readonly byte[] _input;
         readonly BaseLine _baseLine;
+        int _lineNum = 0;
+        MemoryStream _output;
+        readonly byte[] _comma;
+        readonly byte[] _newLine;
+
 
         public Import02()
         {
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             _enc = Encoding.GetEncoding("shift-jis");
+            _comma = _enc.GetBytes(",");
+            _newLine = _enc.GetBytes("\r\n");
             //_input = File.ReadAllBytes(INPUT_FILE);
             _input = Enumerable.Repeat(File.ReadAllBytes(INPUT_FILE), 1000).SelectMany(x => x).ToArray();
             _baseLine = new BaseLine(_input);
+            _output = new MemoryStream();
+            _lineNum = 0;
         }
 
         #region Benchmark
         [Benchmark(Baseline = true)]
-        public async Task BaseLineAsync()
+        public async Task ListAsync()
         {
             await _baseLine.RunAsync();
         }
@@ -49,20 +60,20 @@ namespace ImportingProcess
         [Benchmark]
         public async Task RowByteAsync()
         {
-            var comma = _enc.GetBytes(",");
-            var newLine = _enc.GetBytes("\n");
-
             var input = new MemoryStream(_input);
-            var output = new MemoryStream();
-
             await foreach (var r in ImportRowByteAsync(input))
-                Export(output, r, comma, newLine);
-            //File.WriteAllBytes("output.txt", output.ToArray());
+                Export(_output, r, _comma, _newLine);
+#if DEBUG
+            Console.WriteLine(_enc.GetString(output.ToArray()));
+            File.WriteAllBytes("output.txt", output.ToArray());
+            Console.WriteLine();
+            Console.WriteLine(_lineNum);
+#endif
+
         }
 
         private async IAsyncEnumerable<RowByte> ImportRowByteAsync(Stream st)
         {
-            var lineNum = 1;
             for (; ; )
             {
                 var buffer = new byte[_totalLengthByte];
@@ -71,13 +82,13 @@ namespace ImportingProcess
                     break;
 
                 if (buffer.Last() == (byte)'\r')
-                    throw new ApplicationException("LF not found");
+                    throw new ApplicationException("\r not found");
 
                 var offset = HEADER_BYTE_LEN;
                 for (int i = 0; i < DETAIL_COUNT; i++)
                 {
                     yield return new RowByte(
-                        lineNum++,
+                        _lineNum++,
                         i,
                         buffer.AsSpan()[..HEADER_BYTE_LEN].ToArray(),
                         buffer.AsSpan().Slice(offset, DETAIL_BYTE_LEN).ToArray(),
@@ -133,11 +144,11 @@ namespace ImportingProcess
             public int DetailID { get => _detailID; }
             public ReadOnlySpan<byte> Header01 { get => _header.AsSpan().Slice(9, 8); }
             public ReadOnlySpan<byte> Header02 { get => _header.AsSpan().Slice(17, 14); }
-            public ReadOnlySpan<byte> Header03 { get => _header.AsSpan().Slice(24, 10); }
-            public ReadOnlySpan<byte> Header04 { get => _header.AsSpan().Slice(28, 4); }
-            public ReadOnlySpan<byte> Header05 { get => _header.AsSpan().Slice(32, 6); }
-            public ReadOnlySpan<byte> Header06 { get => _header.AsSpan().Slice(38, 6); }
-            public ReadOnlySpan<byte> Header07 { get => _header.AsSpan().Slice(44, 12); }
+            public ReadOnlySpan<byte> Header03 { get => _header.AsSpan().Slice(31, 10); }
+            public ReadOnlySpan<byte> Header04 { get => _header.AsSpan().Slice(41, 4); }
+            public ReadOnlySpan<byte> Header05 { get => _header.AsSpan().Slice(45, 6); }
+            public ReadOnlySpan<byte> Header06 { get => _header.AsSpan().Slice(51, 6); }
+            public ReadOnlySpan<byte> Header07 { get => _header.AsSpan().Slice(57, 12); }
             public ReadOnlySpan<byte> Data { get => _detail.AsSpan()[..DETAIL_BYTE_LEN]; }
             public ReadOnlySpan<byte> Footer01 { get => _footer.AsSpan().Slice(0, 10); }
             public ReadOnlySpan<byte> Footer02 { get => _footer.AsSpan().Slice(10, 18); }
@@ -154,19 +165,19 @@ namespace ImportingProcess
         [Benchmark]
         public async Task RowMemoryAsync()
         {
-            var comma = _enc.GetBytes(",");
-            var newLine = _enc.GetBytes("\n");
-
             var input = new MemoryStream(_input);
-            var output = new MemoryStream();
-
             await foreach (var r in ImportRowMemoryAsync(input))
-                Export(output, r, comma, newLine);
+                Export(_output, r, _comma, _newLine);
+#if DEBUG
+            Console.WriteLine(_enc.GetString(output.ToArray()));
+            File.WriteAllBytes("output.txt", output.ToArray());
+            Console.WriteLine();
+            Console.WriteLine(_lineNum);
+#endif
         }
 
         private async IAsyncEnumerable<RowMemory> ImportRowMemoryAsync(Stream st)
         {
-            var lineNum = 1;
             for (; ; )
             {
                 var buffer = new byte[_totalLengthByte];
@@ -175,13 +186,13 @@ namespace ImportingProcess
                     break;
 
                 if (buffer.Last() == (byte)'\r')
-                    throw new ApplicationException("LF not found");
+                    throw new ApplicationException("\r not found");
 
                 var offset = HEADER_BYTE_LEN;
                 for (int i = 0; i < DETAIL_COUNT; i++)
                 {
                     yield return new RowMemory(
-                        lineNum++,
+                        _lineNum++,
                         i,
                         buffer.AsMemory()[..HEADER_BYTE_LEN],
                         buffer.AsMemory().Slice(offset, DETAIL_BYTE_LEN),
@@ -220,11 +231,11 @@ namespace ImportingProcess
         {
             readonly int _headerID;
             readonly int _detailID;
-            readonly Memory<byte> _header;
-            readonly Memory<byte> _detail;
-            readonly Memory<byte> _footer;
+            readonly ReadOnlyMemory<byte> _header;
+            readonly ReadOnlyMemory<byte> _detail;
+            readonly ReadOnlyMemory<byte> _footer;
 
-            public RowMemory(int headerID, int detailID, Memory<byte> header, Memory<byte> detail, Memory<byte> footer)
+            public RowMemory(int headerID, int detailID, ReadOnlyMemory<byte> header, ReadOnlyMemory<byte> detail, ReadOnlyMemory<byte> footer)
             {
                 _headerID = headerID;
                 _detailID = detailID;
@@ -237,11 +248,11 @@ namespace ImportingProcess
             public int DetailID { get => _detailID; }
             public ReadOnlySpan<byte> Header01 { get => _header.Slice(9, 8).Span; }
             public ReadOnlySpan<byte> Header02 { get => _header.Slice(17, 14).Span; }
-            public ReadOnlySpan<byte> Header03 { get => _header.Slice(24, 10).Span; }
-            public ReadOnlySpan<byte> Header04 { get => _header.Slice(28, 4).Span; }
-            public ReadOnlySpan<byte> Header05 { get => _header.Slice(32, 6).Span; }
-            public ReadOnlySpan<byte> Header06 { get => _header.Slice(38, 6).Span; }
-            public ReadOnlySpan<byte> Header07 { get => _header.Slice(44, 12).Span; }
+            public ReadOnlySpan<byte> Header03 { get => _header.Slice(31, 10).Span; }
+            public ReadOnlySpan<byte> Header04 { get => _header.Slice(41, 4).Span; }
+            public ReadOnlySpan<byte> Header05 { get => _header.Slice(45, 6).Span; }
+            public ReadOnlySpan<byte> Header06 { get => _header.Slice(51, 6).Span; }
+            public ReadOnlySpan<byte> Header07 { get => _header.Slice(57, 12).Span; }
             public ReadOnlySpan<byte> Data { get => _detail[..DETAIL_BYTE_LEN].Span; }
             public ReadOnlySpan<byte> Footer01 { get => _footer.Slice(0, 10).Span; }
             public ReadOnlySpan<byte> Footer02 { get => _footer.Slice(10, 18).Span; }
@@ -254,5 +265,102 @@ namespace ImportingProcess
         }
         #endregion
 
+        #region
+        [Benchmark]
+        public async Task PipelinesAsync()
+        {
+            var input = new MemoryStream(_input);
+            var pipe = new Pipe();
+            var writing = FillPipeAsync(input, pipe.Writer);
+            var reading = ReadPipeAsync(pipe.Reader);
+            await Task.WhenAll(writing, reading);
+#if DEBUG
+            Console.WriteLine(_enc.GetString(_output.ToArray()));
+            File.WriteAllBytes("output.txt", _output.ToArray());
+            Console.WriteLine();
+            Console.WriteLine(_lineNum);
+#endif
+            // https://docs.microsoft.com/ja-jp/dotnet/standard/io/pipelines
+            // https://qiita.com/skitoy4321/items/0fc4dc72bc50dabba92b
+        }
+
+        public async Task FillPipeAsync(Stream stream, PipeWriter writer)
+        {
+            while (true)
+            {
+                try
+                {
+                    var memory = writer.GetMemory();
+                    int byteRead = await stream.ReadAsync(memory);
+                    if (byteRead == 0)
+                        break;
+                    writer.Advance(byteRead);
+                }
+                catch
+                {
+                    break;
+                }
+                var result = await writer.FlushAsync();
+                if (result.IsCompleted)
+                    break;
+            }
+            writer.Complete();
+        }
+
+        private async Task ReadPipeAsync(PipeReader reader)
+        {
+            while (true)
+            {
+                var result = await reader.ReadAsync();
+                var buffer = result.Buffer;
+                SequencePosition? position;
+                do
+                {
+                    position = buffer.PositionOf((byte)'\n');
+                    if (position != null)
+                    {
+                        try
+                        {
+                            ParseLine(buffer.Slice(0, position.Value));
+                        }
+                        catch (Exception ex)
+                        {
+                            reader.Complete(ex);
+                            return;
+                        }
+                        buffer = buffer.Slice(buffer.GetPosition(1, position.Value));
+                    }
+                } while (position != null);
+                reader.AdvanceTo(buffer.Start, buffer.End);
+                if (result.IsCompleted)
+                    break;
+            }
+            reader.Complete();
+        }
+
+        private void ParseLine(ReadOnlySequence<byte> seq)
+        {
+            var lineBuffer = seq.IsSingleSegment ? seq.First : seq.ToArray();
+            foreach (var r in ParseRows(lineBuffer))
+                Export(_output, r, _comma, _newLine);
+        }
+
+        private IEnumerable<RowMemory> ParseRows(ReadOnlyMemory<byte> segment)
+        {
+            var offset = HEADER_BYTE_LEN;
+            for (int i = 0; i < DETAIL_COUNT; i++)
+            {
+                yield return new RowMemory(
+                    _lineNum++,
+                    i,
+                    segment[..HEADER_BYTE_LEN],
+                    segment.Slice(offset, DETAIL_BYTE_LEN),
+                    segment.Slice(_footerOffsetByte, FOOTER_BYTE_LEN)
+                );
+                offset += DETAIL_BYTE_LEN;
+            }
+
+        }
+        #endregion
     }
 }
