@@ -6,7 +6,7 @@ using System.Text;
 #if DEBUG
 //var test = new Import01();
 var test = new Import02();
-await test.FirstVersionAsync();
+await test.RowByteAsync();
 Console.WriteLine("Press any key...");
 Console.ReadLine();
 #else
