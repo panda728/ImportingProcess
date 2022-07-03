@@ -2,11 +2,12 @@
 Benchmark program to study the efficiency of file ingestion processes that may be found in Japanese business systems.
 
 ver2. Result
-|         Method |     Mean |       Error |   StdDev | Ratio | RatioSD |      Gen 0 |      Gen 1 |     Gen 2 | Allocated |
-|--------------- |---------:|------------:|---------:|------:|--------:|-----------:|-----------:|----------:|----------:|
-|  BaseLineAsync | 736.8 ms | 1,001.49 ms | 54.89 ms |  1.00 |    0.00 | 51000.0000 | 17000.0000 | 4000.0000 |    375 MB |
-|   RowByteAsync | 185.5 ms |   169.70 ms |  9.30 ms |  0.25 |    0.03 | 31000.0000 |  2000.0000 | 2000.0000 |    244 MB |
-| RowMemoryAsync | 180.3 ms |    87.94 ms |  4.82 ms |  0.25 |    0.02 | 17000.0000 |  2000.0000 | 2000.0000 |    188 MB |
+|         Method |     Mean |    Error |   StdDev | Ratio | RatioSD |      Gen 0 |      Gen 1 |     Gen 2 | Allocated |
+|--------------- |---------:|---------:|---------:|------:|--------:|-----------:|-----------:|----------:|----------:|
+|      ListAsync | 715.5 ms | 336.0 ms | 18.42 ms |  1.00 |    0.00 | 51000.0000 | 17000.0000 | 4000.0000 |    375 MB |
+|   RowByteAsync | 171.4 ms | 705.9 ms | 38.69 ms |  0.24 |    0.06 | 29000.0000 |          - |         - |    116 MB |
+| RowMemoryAsync | 166.9 ms | 778.2 ms | 42.66 ms |  0.23 |    0.06 | 15000.0000 |          - |         - |     61 MB |
+| PipelinesAsync | 169.1 ms | 695.2 ms | 38.11 ms |  0.24 |    0.06 | 14000.0000 |          - |         - |     56 MB |
 
 
 ver1.　Result
