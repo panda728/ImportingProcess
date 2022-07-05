@@ -29,11 +29,10 @@ namespace ImportingProcess
         readonly Encoding _enc;
         readonly byte[] _input;
         readonly BaseLine _baseLine;
-        int _lineNum = 0;
         MemoryStream _output;
         readonly byte[] _comma;
         readonly byte[] _newLine;
-
+        int _lineNum;
 
         public Import02()
         {
@@ -60,16 +59,17 @@ namespace ImportingProcess
         [Benchmark]
         public async Task RowByteAsync()
         {
+            _output = new MemoryStream();
+            _lineNum = 0;
             var input = new MemoryStream(_input);
             await foreach (var r in ImportRowByteAsync(input))
                 Export(_output, r, _comma, _newLine);
 #if DEBUG
-            Console.WriteLine(_enc.GetString(output.ToArray()));
-            File.WriteAllBytes("output.txt", output.ToArray());
+            Console.WriteLine(_enc.GetString(_output.ToArray()));
+            File.WriteAllBytes("output.txt", _output.ToArray());
             Console.WriteLine();
             Console.WriteLine(_lineNum);
 #endif
-
         }
 
         private async IAsyncEnumerable<RowByte> ImportRowByteAsync(Stream st)
@@ -94,9 +94,9 @@ namespace ImportingProcess
                     yield return new RowByte(
                         headerID,
                         i,
-                        buffer.AsSpan()[..HEADER_BYTE_LEN].ToArray(),
-                        buffer.AsSpan().Slice(offset, DETAIL_BYTE_LEN).ToArray(),
-                        buffer.AsSpan().Slice(_footerOffsetByte, FOOTER_BYTE_LEN).ToArray()
+                        buffer.AsSpan(0, HEADER_BYTE_LEN).ToArray(),
+                        buffer.AsSpan(offset, DETAIL_BYTE_LEN).ToArray(),
+                        buffer.AsSpan(_footerOffsetByte, FOOTER_BYTE_LEN).ToArray()
                     );
                     offset += DETAIL_BYTE_LEN;
                 }
@@ -146,22 +146,22 @@ namespace ImportingProcess
 
             public int HeaderID { get => _headerID; }
             public int DetailID { get => _detailID; }
-            public ReadOnlySpan<byte> Header01 { get => _header.AsSpan().Slice(9, 8); }
-            public ReadOnlySpan<byte> Header02 { get => _header.AsSpan().Slice(17, 14); }
-            public ReadOnlySpan<byte> Header03 { get => _header.AsSpan().Slice(31, 10); }
-            public ReadOnlySpan<byte> Header04 { get => _header.AsSpan().Slice(41, 4); }
-            public ReadOnlySpan<byte> Header05 { get => _header.AsSpan().Slice(45, 6); }
-            public ReadOnlySpan<byte> Header06 { get => _header.AsSpan().Slice(51, 6); }
-            public ReadOnlySpan<byte> Header07 { get => _header.AsSpan().Slice(57, 12); }
+            public ReadOnlySpan<byte> Header01 { get => _header.AsSpan(9, 8); }
+            public ReadOnlySpan<byte> Header02 { get => _header.AsSpan(17, 14); }
+            public ReadOnlySpan<byte> Header03 { get => _header.AsSpan(31, 10); }
+            public ReadOnlySpan<byte> Header04 { get => _header.AsSpan(41, 4); }
+            public ReadOnlySpan<byte> Header05 { get => _header.AsSpan(45, 6); }
+            public ReadOnlySpan<byte> Header06 { get => _header.AsSpan(51, 6); }
+            public ReadOnlySpan<byte> Header07 { get => _header.AsSpan(57, 12); }
             public ReadOnlySpan<byte> Data { get => _detail.AsSpan()[..DETAIL_BYTE_LEN]; }
-            public ReadOnlySpan<byte> Footer01 { get => _footer.AsSpan().Slice(0, 10); }
-            public ReadOnlySpan<byte> Footer02 { get => _footer.AsSpan().Slice(10, 18); }
-            public ReadOnlySpan<byte> Footer03 { get => _footer.AsSpan().Slice(28, 4); }
-            public ReadOnlySpan<byte> Footer04 { get => _footer.AsSpan().Slice(32, 6); }
-            public ReadOnlySpan<byte> Footer05 { get => _footer.AsSpan().Slice(38, 16); }
-            public ReadOnlySpan<byte> Footer06 { get => _footer.AsSpan().Slice(54, 10); }
-            public ReadOnlySpan<byte> Footer07 { get => _footer.AsSpan().Slice(64, 6); }
-            public ReadOnlySpan<byte> Footer08 { get => _footer.AsSpan().Slice(70, 8); }
+            public ReadOnlySpan<byte> Footer01 { get => _footer.AsSpan(0, 10); }
+            public ReadOnlySpan<byte> Footer02 { get => _footer.AsSpan(10, 18); }
+            public ReadOnlySpan<byte> Footer03 { get => _footer.AsSpan(28, 4); }
+            public ReadOnlySpan<byte> Footer04 { get => _footer.AsSpan(32, 6); }
+            public ReadOnlySpan<byte> Footer05 { get => _footer.AsSpan(38, 16); }
+            public ReadOnlySpan<byte> Footer06 { get => _footer.AsSpan(54, 10); }
+            public ReadOnlySpan<byte> Footer07 { get => _footer.AsSpan(64, 6); }
+            public ReadOnlySpan<byte> Footer08 { get => _footer.AsSpan(70, 8); }
         }
         #endregion
 
@@ -169,12 +169,14 @@ namespace ImportingProcess
         [Benchmark]
         public async Task RowMemoryAsync()
         {
+            _output = new MemoryStream();
+            _lineNum = 0;
             var input = new MemoryStream(_input);
             await foreach (var r in ImportRowMemoryAsync(input))
                 Export(_output, r, _comma, _newLine);
 #if DEBUG
-            Console.WriteLine(_enc.GetString(output.ToArray()));
-            File.WriteAllBytes("output.txt", output.ToArray());
+            Console.WriteLine(_enc.GetString(_output.ToArray()));
+            File.WriteAllBytes("output.txt", _output.ToArray());
             Console.WriteLine();
             Console.WriteLine(_lineNum);
 #endif
@@ -195,16 +197,15 @@ namespace ImportingProcess
                 _lineNum++;
                 if (!int.TryParse(_enc.GetString(buffer.AsSpan(0, 9)), out var headerID))
                     throw new ApplicationException("Could not be converted to int.");
-
                 var offset = HEADER_BYTE_LEN;
                 for (int i = 0; i < DETAIL_COUNT; i++)
                 {
                     yield return new RowMemory(
                         headerID,
                         i,
-                        buffer.AsMemory()[..HEADER_BYTE_LEN],
-                        buffer.AsMemory().Slice(offset, DETAIL_BYTE_LEN),
-                        buffer.AsMemory().Slice(_footerOffsetByte, FOOTER_BYTE_LEN)
+                        buffer.AsMemory(0,HEADER_BYTE_LEN),
+                        buffer.AsMemory(offset, DETAIL_BYTE_LEN),
+                        buffer.AsMemory(_footerOffsetByte, FOOTER_BYTE_LEN)
                     );
                     offset += DETAIL_BYTE_LEN;
                 }
@@ -262,7 +263,7 @@ namespace ImportingProcess
             public ReadOnlySpan<byte> Header06 { get => _header.Slice(51, 6).Span; }
             public ReadOnlySpan<byte> Header07 { get => _header.Slice(57, 12).Span; }
             public ReadOnlySpan<byte> Data { get => _detail[..DETAIL_BYTE_LEN].Span; }
-            public ReadOnlySpan<byte> Footer01 { get => _footer.Slice(0, 10).Span; }
+            public ReadOnlySpan<byte> Footer01 { get => _footer[..10].Span; }
             public ReadOnlySpan<byte> Footer02 { get => _footer.Slice(10, 18).Span; }
             public ReadOnlySpan<byte> Footer03 { get => _footer.Slice(28, 4).Span; }
             public ReadOnlySpan<byte> Footer04 { get => _footer.Slice(32, 6).Span; }
@@ -277,6 +278,8 @@ namespace ImportingProcess
         [Benchmark]
         public async Task PipelinesAsync()
         {
+            _output = new MemoryStream();
+            _lineNum = 0;
             var input = new MemoryStream(_input);
             var pipe = new Pipe();
             var writing = FillPipeAsync(input, pipe.Writer);
@@ -356,7 +359,7 @@ namespace ImportingProcess
         private IEnumerable<RowMemory> ParseRows(ReadOnlyMemory<byte> segment)
         {
             _lineNum++;
-            if (!int.TryParse(_enc.GetString(segment.Slice(0, 9).Span), out var headerID))
+            if (!int.TryParse(_enc.GetString(segment[..9].Span), out var headerID))
                 throw new ApplicationException("Could not be converted to int.");
 
             var offset = HEADER_BYTE_LEN;
