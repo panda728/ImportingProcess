@@ -807,7 +807,7 @@ namespace ImportingProcess
 
         }
 
-        public struct RowDispose:IDisposable
+        public struct RowDispose : IDisposable
         {
             readonly int _headerID;
             readonly int _detailID;
@@ -878,6 +878,86 @@ namespace ImportingProcess
                 output.Write(Footer05);
                 output.Write(Footer06);
                 output.Write(newLine);
+            }
+        }
+        #endregion
+
+
+        #region
+        [Benchmark]
+        public async Task Pipelines6Async()
+        {
+            var output = new MemoryStream();
+            _lineNum = 0;
+            var input = new MemoryStream(_input);
+
+            var pipe = new Pipe();
+            var writing = FillPipeAsync(input, pipe.Writer);
+            var reading = ReadPipe6Async(output, pipe.Reader);
+            await Task.WhenAll(writing, reading);
+#if DEBUG
+            Console.WriteLine(_enc.GetString(output.ToArray()));
+            File.WriteAllBytes("output.txt", output.ToArray());
+            Console.WriteLine();
+            Console.WriteLine(_lineNum);
+#endif
+            // https://docs.microsoft.com/ja-jp/dotnet/standard/io/pipelines
+            // https://qiita.com/skitoy4321/items/0fc4dc72bc50dabba92b
+        }
+
+        private async Task ReadPipe6Async(Stream output, PipeReader reader)
+        {
+            while (true)
+            {
+                var result = await reader.ReadAsync();
+                var buffer = result.Buffer;
+                SequencePosition? position;
+                do
+                {
+                    position = buffer.PositionOf((byte)'\n');
+                    if (position != null)
+                    {
+                        try
+                        {
+                            Export6(output, buffer.Slice(0, position.Value));
+                        }
+                        catch (Exception ex)
+                        {
+                            reader.Complete(ex);
+                            return;
+                        }
+                        buffer = buffer.Slice(buffer.GetPosition(1, position.Value));
+                    }
+                } while (position != null);
+                reader.AdvanceTo(buffer.Start, buffer.End);
+                if (result.IsCompleted)
+                    break;
+            }
+            reader.Complete();
+        }
+
+        private void Export6(Stream output, ReadOnlySequence<byte> segment)
+        {
+            var line = segment.IsSingleSegment
+                ? segment.First
+                : segment.ToArray();
+
+            _lineNum++;
+            if (!int.TryParse(_enc.GetString(line[..9].Span), out var headerID))
+                throw new ApplicationException("Could not be converted to int.");
+
+            var offset = HEADER_BYTE_LEN;
+            for (int i = 0; i < DETAIL_COUNT; i++)
+            {
+                var r = new RowStruct(
+                    headerID,
+                    i,
+                    line[..HEADER_BYTE_LEN],
+                    line.Slice(offset, DETAIL_BYTE_LEN),
+                    line.Slice(_footerOffsetByte, FOOTER_BYTE_LEN)
+                );
+                r.Export(output, _comma, _newLine);
+                offset += DETAIL_BYTE_LEN;
             }
         }
         #endregion
