@@ -10,7 +10,7 @@ var test = new Import02();
 //await test.RowByteAsync();
 //await test.RowMemoryAsync();
 //await test.PipelinesAsync();
-await test.Pipelines3Async();
+await test.Pipelines6Async();
 Console.WriteLine("Press any key...");
 Console.ReadLine();
 #else
