@@ -27,8 +27,9 @@ namespace ImportingProcess
         readonly byte[] _crlf = Encoding.ASCII.GetBytes("\r\n");
         readonly byte[] _comma = Encoding.ASCII.GetBytes(",");
 
-        readonly int _footerOffsetByte = HEADER_BYTE_LEN + DETAIL_BYTE_LEN * DETAIL_COUNT;
         readonly int _totalLengthByte = HEADER_BYTE_LEN + DETAIL_BYTE_LEN * DETAIL_COUNT + FOOTER_BYTE_LEN + 2;
+        readonly int _footerOffsetByte = HEADER_BYTE_LEN + DETAIL_BYTE_LEN * DETAIL_COUNT;
+        readonly int _footerEnd = HEADER_BYTE_LEN + DETAIL_BYTE_LEN * DETAIL_COUNT + FOOTER_BYTE_LEN;
         readonly byte[] _input;
         readonly BaseLine _baseLine;
         readonly Encoding _enc;
@@ -539,6 +540,48 @@ namespace ImportingProcess
                 output.Write(Footer07);
                 output.Write(Footer08);
                 output.Write(crlf);
+            }
+        }
+        #endregion
+
+        #region ReadStreamStruct
+        [Benchmark]
+        public Task ReadStreamStruct()
+        {
+            var input = new MemoryStream(_input);
+            var output = new MemoryStream();
+            ProcessRowStruct(input, output);
+            return Task.CompletedTask;
+        }
+
+        private void ProcessRowStruct(Stream input, Stream output)
+        {
+            Span<byte> buffer = stackalloc byte[_totalLengthByte];
+            for (; ; )
+            {
+                var len = input.Read(buffer);
+                if (len == 0)
+                    break;
+
+                if (!buffer.EndsWith(_crlf))
+                    throw new ApplicationException("\r not found");
+
+                if (!int.TryParse(_enc.GetString(buffer[..9]), out var headerID))
+                    throw new ApplicationException("Could not be converted to int.");
+                var offset = HEADER_BYTE_LEN;
+                for (int i = 0; i < DETAIL_COUNT; i++)
+                {
+                    var offsetEnd = offset + DETAIL_BYTE_LEN;
+                    var r = new RowStruct(
+                        headerID,
+                        i,
+                        buffer[..HEADER_BYTE_LEN],
+                        buffer[offset..offsetEnd],
+                        buffer[_footerOffsetByte.._footerEnd]
+                    );
+                    r.Export(output, _comma, _crlf);
+                    offset += DETAIL_BYTE_LEN;
+                }
             }
         }
         #endregion
