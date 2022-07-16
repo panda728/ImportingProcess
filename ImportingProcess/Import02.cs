@@ -24,27 +24,22 @@ namespace ImportingProcess
         const int FOOTER_BYTE_LEN = 39 * 2;
         const int DETAIL_COUNT = 10;
 
+        readonly byte[] _crlf = Encoding.ASCII.GetBytes("\r\n");
+        readonly byte[] _comma = Encoding.ASCII.GetBytes(",");
+
         readonly int _footerOffsetByte = HEADER_BYTE_LEN + DETAIL_BYTE_LEN * DETAIL_COUNT;
         readonly int _totalLengthByte = HEADER_BYTE_LEN + DETAIL_BYTE_LEN * DETAIL_COUNT + FOOTER_BYTE_LEN + 2;
-        readonly Encoding _enc;
         readonly byte[] _input;
         readonly BaseLine _baseLine;
-        MemoryStream _output;
-        readonly byte[] _comma;
-        readonly byte[] _newLine;
-        int _lineNum;
+        readonly Encoding _enc;
 
         public Import02()
         {
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-            _enc = Encoding.GetEncoding("shift-jis");
-            _comma = _enc.GetBytes(",");
-            _newLine = _enc.GetBytes("\r\n");
             //_input = File.ReadAllBytes(INPUT_FILE);
             _input = Enumerable.Repeat(File.ReadAllBytes(INPUT_FILE), 1000).SelectMany(x => x).ToArray();
             _baseLine = new BaseLine(_input);
-            _output = new MemoryStream();
-            _lineNum = 0;
+            _enc = Encoding.GetEncoding("shift-jis");
         }
 
         #region Benchmark
@@ -55,43 +50,36 @@ namespace ImportingProcess
         }
         #endregion
 
-        #region Byte
+        #region ReadStream
         [Benchmark]
-        public async Task RowByteAsync()
+        public Task ReadStream()
         {
-            _output = new MemoryStream();
-            _lineNum = 0;
             var input = new MemoryStream(_input);
-            await foreach (var r in ImportRowByteAsync(input))
-                Export(_output, r, _comma, _newLine);
-#if DEBUG
-            Console.WriteLine(_enc.GetString(_output.ToArray()));
-            File.WriteAllBytes("output.txt", _output.ToArray());
-            Console.WriteLine();
-            Console.WriteLine(_lineNum);
-#endif
+            var output = new MemoryStream();
+            foreach (var r in ProcessRowClass(input))
+                r.Export(output, _comma, _crlf);
+            return Task.CompletedTask;
         }
 
-        private async IAsyncEnumerable<RowByte> ImportRowByteAsync(Stream st)
+        private IEnumerable<RowClass> ProcessRowClass(Stream st)
         {
             for (; ; )
             {
                 var buffer = new byte[_totalLengthByte];
-                var len = await st.ReadAsync(buffer.AsMemory(0, _totalLengthByte));
+                var len = st.Read(buffer);
                 if (len == 0)
                     break;
 
                 if (buffer.Last() == (byte)'\r')
                     throw new ApplicationException("\r not found");
 
-                _lineNum++;
                 if (!int.TryParse(_enc.GetString(buffer.AsSpan(0, 9)), out var headerID))
                     throw new ApplicationException("Could not be converted to int.");
 
                 var offset = HEADER_BYTE_LEN;
                 for (int i = 0; i < DETAIL_COUNT; i++)
                 {
-                    yield return new RowByte(
+                    yield return new RowClass(
                         headerID,
                         i,
                         buffer.AsSpan(0, HEADER_BYTE_LEN).ToArray(),
@@ -102,443 +90,17 @@ namespace ImportingProcess
                 }
             }
         }
-
-        private void Export(Stream st, RowByte r, ReadOnlySpan<byte> comma, ReadOnlySpan<byte> newLine)
-        {
-            st.Write(_enc.GetBytes($"{r.HeaderID}"));
-            st.Write(comma);
-            st.Write(_enc.GetBytes($"{r.DetailID:000}"));
-            st.Write(comma);
-            st.Write(r.Data);
-            st.Write(comma);
-            st.Write(r.Header01);
-            st.Write(r.Header02);
-            st.Write(r.Header03);
-            st.Write(r.Header04);
-            st.Write(r.Header05);
-            st.Write(r.Header06);
-            st.Write(r.Header07);
-            st.Write(r.Footer01);
-            st.Write(r.Footer02);
-            st.Write(r.Footer03);
-            st.Write(r.Footer04);
-            st.Write(r.Footer05);
-            st.Write(r.Footer06);
-            st.Write(newLine);
-        }
-
-        public class RowByte
-        {
-            readonly int _headerID;
-            readonly int _detailID;
-            readonly byte[] _header;
-            readonly byte[] _detail;
-            readonly byte[] _footer;
-
-            public RowByte(int headerID, int detailID, byte[] header, byte[] detail, byte[] footer)
-            {
-                _headerID = headerID;
-                _detailID = detailID;
-                _header = header;
-                _detail = detail;
-                _footer = footer;
-            }
-
-            public int HeaderID { get => _headerID; }
-            public int DetailID { get => _detailID; }
-            public ReadOnlySpan<byte> Header01 { get => _header.AsSpan(9, 8); }
-            public ReadOnlySpan<byte> Header02 { get => _header.AsSpan(17, 14); }
-            public ReadOnlySpan<byte> Header03 { get => _header.AsSpan(31, 10); }
-            public ReadOnlySpan<byte> Header04 { get => _header.AsSpan(41, 4); }
-            public ReadOnlySpan<byte> Header05 { get => _header.AsSpan(45, 6); }
-            public ReadOnlySpan<byte> Header06 { get => _header.AsSpan(51, 6); }
-            public ReadOnlySpan<byte> Header07 { get => _header.AsSpan(57, 12); }
-            public ReadOnlySpan<byte> Data { get => _detail.AsSpan()[..DETAIL_BYTE_LEN]; }
-            public ReadOnlySpan<byte> Footer01 { get => _footer.AsSpan(0, 10); }
-            public ReadOnlySpan<byte> Footer02 { get => _footer.AsSpan(10, 18); }
-            public ReadOnlySpan<byte> Footer03 { get => _footer.AsSpan(28, 4); }
-            public ReadOnlySpan<byte> Footer04 { get => _footer.AsSpan(32, 6); }
-            public ReadOnlySpan<byte> Footer05 { get => _footer.AsSpan(38, 16); }
-            public ReadOnlySpan<byte> Footer06 { get => _footer.AsSpan(54, 10); }
-            public ReadOnlySpan<byte> Footer07 { get => _footer.AsSpan(64, 6); }
-            public ReadOnlySpan<byte> Footer08 { get => _footer.AsSpan(70, 8); }
-        }
         #endregion
 
-        #region Memroy
-        [Benchmark]
-        public async Task RowMemoryAsync()
-        {
-            _output = new MemoryStream();
-            _lineNum = 0;
-            var input = new MemoryStream(_input);
-            await foreach (var r in ImportRowMemoryAsync(input))
-                Export(_output, r, _comma, _newLine);
-#if DEBUG
-            Console.WriteLine(_enc.GetString(_output.ToArray()));
-            File.WriteAllBytes("output.txt", _output.ToArray());
-            Console.WriteLine();
-            Console.WriteLine(_lineNum);
-#endif
-        }
-
-        private async IAsyncEnumerable<RowMemory> ImportRowMemoryAsync(Stream st)
-        {
-            for (; ; )
-            {
-                var buffer = new byte[_totalLengthByte];
-                var len = await st.ReadAsync(buffer.AsMemory(0, _totalLengthByte));
-                if (len == 0)
-                    break;
-
-                if (buffer.Last() == (byte)'\r')
-                    throw new ApplicationException("\r not found");
-
-                _lineNum++;
-                if (!int.TryParse(_enc.GetString(buffer.AsSpan(0, 9)), out var headerID))
-                    throw new ApplicationException("Could not be converted to int.");
-                var offset = HEADER_BYTE_LEN;
-                for (int i = 0; i < DETAIL_COUNT; i++)
-                {
-                    yield return new RowMemory(
-                        headerID,
-                        i,
-                        buffer.AsMemory(0, HEADER_BYTE_LEN),
-                        buffer.AsMemory(offset, DETAIL_BYTE_LEN),
-                        buffer.AsMemory(_footerOffsetByte, FOOTER_BYTE_LEN)
-                    );
-                    offset += DETAIL_BYTE_LEN;
-                }
-            }
-        }
-
-        private void Export(Stream st, RowMemory r, ReadOnlySpan<byte> comma, ReadOnlySpan<byte> newLine)
-        {
-            st.Write(_enc.GetBytes($"{r.HeaderID}"));
-            st.Write(comma);
-            st.Write(_enc.GetBytes($"{r.DetailID:000}"));
-            st.Write(comma);
-            st.Write(r.Data);
-            st.Write(comma);
-            st.Write(r.Header01);
-            st.Write(r.Header02);
-            st.Write(r.Header03);
-            st.Write(r.Header04);
-            st.Write(r.Header05);
-            st.Write(r.Header06);
-            st.Write(r.Header07);
-            st.Write(r.Footer01);
-            st.Write(r.Footer02);
-            st.Write(r.Footer03);
-            st.Write(r.Footer04);
-            st.Write(r.Footer05);
-            st.Write(r.Footer06);
-            st.Write(newLine);
-        }
-
-        public class RowMemory
-        {
-            readonly int _headerID;
-            readonly int _detailID;
-            readonly ReadOnlyMemory<byte> _header;
-            readonly ReadOnlyMemory<byte> _detail;
-            readonly ReadOnlyMemory<byte> _footer;
-
-            public RowMemory(int headerID, int detailID, ReadOnlyMemory<byte> header, ReadOnlyMemory<byte> detail, ReadOnlyMemory<byte> footer)
-            {
-                _headerID = headerID;
-                _detailID = detailID;
-                _header = header;
-                _detail = detail;
-                _footer = footer;
-            }
-
-            public int HeaderID { get => _headerID; }
-            public int DetailID { get => _detailID; }
-            public ReadOnlySpan<byte> Header01 { get => _header.Slice(9, 8).Span; }
-            public ReadOnlySpan<byte> Header02 { get => _header.Slice(17, 14).Span; }
-            public ReadOnlySpan<byte> Header03 { get => _header.Slice(31, 10).Span; }
-            public ReadOnlySpan<byte> Header04 { get => _header.Slice(41, 4).Span; }
-            public ReadOnlySpan<byte> Header05 { get => _header.Slice(45, 6).Span; }
-            public ReadOnlySpan<byte> Header06 { get => _header.Slice(51, 6).Span; }
-            public ReadOnlySpan<byte> Header07 { get => _header.Slice(57, 12).Span; }
-            public ReadOnlySpan<byte> Data { get => _detail[..DETAIL_BYTE_LEN].Span; }
-            public ReadOnlySpan<byte> Footer01 { get => _footer[..10].Span; }
-            public ReadOnlySpan<byte> Footer02 { get => _footer.Slice(10, 18).Span; }
-            public ReadOnlySpan<byte> Footer03 { get => _footer.Slice(28, 4).Span; }
-            public ReadOnlySpan<byte> Footer04 { get => _footer.Slice(32, 6).Span; }
-            public ReadOnlySpan<byte> Footer05 { get => _footer.Slice(38, 16).Span; }
-            public ReadOnlySpan<byte> Footer06 { get => _footer.Slice(54, 10).Span; }
-            public ReadOnlySpan<byte> Footer07 { get => _footer.Slice(64, 6).Span; }
-            public ReadOnlySpan<byte> Footer08 { get => _footer.Slice(70, 8).Span; }
-        }
-        #endregion
-
-        #region PipeLine
-        [Benchmark]
-        public async Task PipelinesSequencePositionAsync()
-        {
-            _output = new MemoryStream();
-            _lineNum = 0;
-            var input = new MemoryStream(_input);
-            var pipe = new Pipe();
-            var writing = FillPipeAsync(input, pipe.Writer);
-            var reading = ReadPipeAsync(pipe.Reader);
-            await Task.WhenAll(writing, reading);
-#if DEBUG
-            Console.WriteLine(_enc.GetString(_output.ToArray()));
-            File.WriteAllBytes("output.txt", _output.ToArray());
-            Console.WriteLine();
-            Console.WriteLine(_lineNum);
-#endif
-            // https://docs.microsoft.com/ja-jp/dotnet/standard/io/pipelines
-            // https://qiita.com/skitoy4321/items/0fc4dc72bc50dabba92b
-        }
-
-        public async Task FillPipeAsync(Stream stream, PipeWriter writer)
-        {
-            while (true)
-            {
-                try
-                {
-                    var memory = writer.GetMemory();
-                    int byteRead = await stream.ReadAsync(memory);
-                    if (byteRead == 0)
-                        break;
-                    writer.Advance(byteRead);
-                }
-                catch
-                {
-                    break;
-                }
-                var result = await writer.FlushAsync();
-                if (result.IsCompleted)
-                    break;
-            }
-            writer.Complete();
-        }
-
-        private async Task ReadPipeAsync(PipeReader reader)
-        {
-            while (true)
-            {
-                var result = await reader.ReadAsync();
-                var buffer = result.Buffer;
-                SequencePosition? position;
-                do
-                {
-                    position = buffer.PositionOf((byte)'\n');
-                    if (position != null)
-                    {
-                        try
-                        {
-                            var seq = buffer.Slice(0, position.Value);
-                            var lineBuffer = seq.IsSingleSegment ? seq.First : seq.ToArray();
-                            foreach (var r in ParseRowsMemory(lineBuffer))
-                                Export(_output, r, _comma, _newLine);
-                        }
-                        catch (Exception ex)
-                        {
-                            reader.Complete(ex);
-                            return;
-                        }
-                        buffer = buffer.Slice(buffer.GetPosition(1, position.Value));
-                    }
-                } while (position != null);
-                reader.AdvanceTo(buffer.Start, buffer.End);
-                if (result.IsCompleted)
-                    break;
-            }
-            reader.Complete();
-        }
-
-        private IEnumerable<RowMemory> ParseRowsMemory(ReadOnlyMemory<byte> lineBuffer)
-        {
-            _lineNum++;
-            if (!int.TryParse(_enc.GetString(lineBuffer[..9].Span), out var headerID))
-                throw new ApplicationException("Could not be converted to int.");
-
-            var header = lineBuffer[..HEADER_BYTE_LEN];
-            var footer = lineBuffer.Slice(_footerOffsetByte, FOOTER_BYTE_LEN);
-            var offset = HEADER_BYTE_LEN;
-            for (int i = 0; i < DETAIL_COUNT; i++)
-            {
-                yield return new RowMemory(
-                    headerID,
-                    i,
-                    header,
-                    lineBuffer.Slice(offset, DETAIL_BYTE_LEN),
-                    footer
-                );
-                offset += DETAIL_BYTE_LEN;
-            }
-
-        }
-        #endregion
-
-        #region
-        [Benchmark]
-        public async Task SequenceReaderMemoryAsync()
-        {
-            _output = new MemoryStream();
-            _lineNum = 0;
-            var input = new MemoryStream(_input);
-            var pipe = new Pipe();
-            var writing = FillPipeAsync(input, pipe.Writer);
-            var reading = ReadPipe2Async(pipe.Reader);
-            await Task.WhenAll(writing, reading);
-#if DEBUG
-            Console.WriteLine(_enc.GetString(_output.ToArray()));
-            File.WriteAllBytes("output.txt", _output.ToArray());
-            Console.WriteLine();
-            Console.WriteLine(_lineNum);
-#endif
-            // https://docs.microsoft.com/ja-jp/dotnet/standard/io/pipelines
-            // https://qiita.com/skitoy4321/items/0fc4dc72bc50dabba92b
-        }
-
-        private async Task ReadPipe2Async(PipeReader reader)
-        {
-            while (true)
-            {
-                var result = await reader.ReadAsync();
-                var buffer = result.Buffer;
-
-                ProcessLine(ref buffer);
-
-                reader.AdvanceTo(buffer.Start, buffer.End);
-
-                if (result.IsCompleted)
-                    break;
-            }
-            reader.Complete();
-        }
-
-        private static ReadOnlySpan<byte> CRLF => new[] { (byte)'\r', (byte)'\n' };
-        private void ProcessLine(ref ReadOnlySequence<byte> buffer)
-        {
-            var sequenceReader = new SequenceReader<byte>(buffer);
-            while (!sequenceReader.End)
-            {
-                while (sequenceReader.TryReadTo(out ReadOnlySpan<byte> line, CRLF))
-                    Export(line);
-
-                buffer = buffer.Slice(sequenceReader.Position);
-                sequenceReader.Advance(buffer.Length);
-            }
-        }
-
-        private void Export(ReadOnlySpan<byte> segment)
-        {
-            _lineNum++;
-            if (!int.TryParse(_enc.GetString(segment[..9]), out var headerID))
-                throw new ApplicationException("Could not be converted to int.");
-
-            var header = segment[..HEADER_BYTE_LEN].ToArray();
-            var footer = segment.Slice(_footerOffsetByte, FOOTER_BYTE_LEN).ToArray();
-            var offset = HEADER_BYTE_LEN;
-            for (int i = 0; i < DETAIL_COUNT; i++)
-            {
-                var r = new RowMemory(
-                   headerID,
-                   i,
-                   header,
-                   segment.Slice(offset, DETAIL_BYTE_LEN).ToArray(),
-                   footer
-               );
-                Export(_output, r, _comma, _newLine);
-                offset += DETAIL_BYTE_LEN;
-            }
-        }
-        #endregion
-
-        #region
-        [Benchmark]
-        public async Task SequenceReaderClassAsync()
-        {
-            var output = new MemoryStream();
-            _lineNum = 0;
-            var input = new MemoryStream(_input);
-
-            var pipe = new Pipe();
-            var writing = FillPipeAsync(input, pipe.Writer);
-            var reading = ReadPipe3Async(output, pipe.Reader);
-            await Task.WhenAll(writing, reading);
-#if DEBUG
-            Console.WriteLine(_enc.GetString(output.ToArray()));
-            File.WriteAllBytes("output.txt", output.ToArray());
-            Console.WriteLine();
-            Console.WriteLine(_lineNum);
-#endif
-            // https://docs.microsoft.com/ja-jp/dotnet/standard/io/pipelines
-            // https://qiita.com/skitoy4321/items/0fc4dc72bc50dabba92b
-        }
-
-        private async Task ReadPipe3Async(Stream output, PipeReader reader)
-        {
-            while (true)
-            {
-                var result = await reader.ReadAsync();
-                var buffer = result.Buffer;
-                ProcessLine3(output, ref buffer);
-                reader.AdvanceTo(buffer.Start, buffer.End);
-                if (result.IsCompleted)
-                    break;
-            }
-            reader.Complete();
-        }
-
-        private void ProcessLine3(Stream output, ref ReadOnlySequence<byte> buffer)
-        {
-            var sequenceReader = new SequenceReader<byte>(buffer);
-            while (!sequenceReader.End)
-            {
-                while (sequenceReader.TryReadTo(out ReadOnlySpan<byte> line, CRLF))
-                    Export3(output, line);
-
-                buffer = buffer.Slice(sequenceReader.Position);
-                sequenceReader.Advance(buffer.Length);
-            }
-        }
-
-        private void Export3(Stream output, ReadOnlySpan<byte> line)
-        {
-            _lineNum++;
-            if (!int.TryParse(_enc.GetString(line[..9]), out var headerID))
-                throw new ApplicationException("Could not be converted to int.");
-
-            var header = ArrayPool<byte>.Shared.Rent(HEADER_BYTE_LEN);
-            var detail = ArrayPool<byte>.Shared.Rent(DETAIL_BYTE_LEN);
-            var footer = ArrayPool<byte>.Shared.Rent(FOOTER_BYTE_LEN);
-
-            line[..HEADER_BYTE_LEN].CopyTo(header);
-            line.Slice(_footerOffsetByte, FOOTER_BYTE_LEN).CopyTo(footer);
-
-            var offset = HEADER_BYTE_LEN;
-            for (int i = 0; i < DETAIL_COUNT; i++)
-            {
-                line.Slice(offset, DETAIL_BYTE_LEN).CopyTo(detail);
-
-                var r = new RowClass(headerID, i, header, detail, footer);
-                r.Export(output, _comma, _newLine);
-
-                offset += DETAIL_BYTE_LEN;
-
-            }
-
-            ArrayPool<byte>.Shared.Return(header);
-            ArrayPool<byte>.Shared.Return(detail);
-            ArrayPool<byte>.Shared.Return(footer);
-        }
-
+        #region Row Class ver.
         public class RowClass
         {
-            readonly int _headerID;
-            readonly int _detailID;
-
             readonly ReadOnlyMemory<byte> _header;
             readonly ReadOnlyMemory<byte> _detail;
             readonly ReadOnlyMemory<byte> _footer;
+
+            readonly int _headerID;
+            readonly int _detailID;
 
             public RowClass(int headerID, int detailID, ReadOnlyMemory<byte> header, ReadOnlyMemory<byte> detail, ReadOnlyMemory<byte> footer)
             {
@@ -568,7 +130,7 @@ namespace ImportingProcess
             ReadOnlySpan<byte> Footer07 => _footer.Slice(64, 6).Span;
             ReadOnlySpan<byte> Footer08 => _footer.Slice(70, 8).Span;
 
-            public void Export(Stream output, ReadOnlySpan<byte> comma, ReadOnlySpan<byte> newLine)
+            public void Export(Stream output, in ReadOnlySpan<byte> comma, in ReadOnlySpan<byte> crlf)
             {
                 output.Write(HeaderID);
                 output.Write(comma);
@@ -589,321 +151,55 @@ namespace ImportingProcess
                 output.Write(Footer04);
                 output.Write(Footer05);
                 output.Write(Footer06);
-                output.Write(newLine);
+                output.Write(Footer07);
+                output.Write(Footer08);
+                output.Write(crlf);
             }
         }
         #endregion
 
-        #region
-        [Benchmark]
-        public async Task SequenceReaderStructAsync()
-        {
-            var output = new MemoryStream();
-            _lineNum = 0;
-            var input = new MemoryStream(_input);
-
-            var pipe = new Pipe();
-            var writing = FillPipeAsync(input, pipe.Writer);
-            var reading = ReadPipe4Async(output, pipe.Reader);
-            await Task.WhenAll(writing, reading);
-#if DEBUG
-            Console.WriteLine(_enc.GetString(output.ToArray()));
-            File.WriteAllBytes("output.txt", output.ToArray());
-            Console.WriteLine();
-            Console.WriteLine(_lineNum);
-#endif
-            // https://docs.microsoft.com/ja-jp/dotnet/standard/io/pipelines
-            // https://qiita.com/skitoy4321/items/0fc4dc72bc50dabba92b
-        }
-
-        private async Task ReadPipe4Async(Stream output, PipeReader reader)
+        public static async Task FillPipeAsync(Stream stream, PipeWriter writer)
         {
             while (true)
             {
-                var result = await reader.ReadAsync();
-                var buffer = result.Buffer;
-                ProcessLine4(output, ref buffer);
-                reader.AdvanceTo(buffer.Start, buffer.End);
+                try
+                {
+                    var memory = writer.GetMemory();
+                    int byteRead = await stream.ReadAsync(memory);
+                    if (byteRead == 0)
+                        break;
+                    writer.Advance(byteRead);
+                }
+                catch
+                {
+                    break;
+                }
+                var result = await writer.FlushAsync();
                 if (result.IsCompleted)
                     break;
             }
-            reader.Complete();
+            writer.Complete();
         }
 
-        private void ProcessLine4(Stream output, ref ReadOnlySequence<byte> buffer)
-        {
-            var sequenceReader = new SequenceReader<byte>(buffer);
-            while (!sequenceReader.End)
-            {
-                while (sequenceReader.TryReadTo(out ReadOnlySpan<byte> line, CRLF))
-                    Export4(output, line);
-
-                buffer = buffer.Slice(sequenceReader.Position);
-                sequenceReader.Advance(buffer.Length);
-            }
-        }
-
-        private void Export4(Stream output, ReadOnlySpan<byte> line)
-        {
-            _lineNum++;
-            if (!int.TryParse(_enc.GetString(line[..9]), out var headerID))
-                throw new ApplicationException("Could not be converted to int.");
-
-            var header = ArrayPool<byte>.Shared.Rent(HEADER_BYTE_LEN);
-            line[..HEADER_BYTE_LEN].CopyTo(header);
-
-            var detail = ArrayPool<byte>.Shared.Rent(DETAIL_BYTE_LEN);
-
-            var footer = ArrayPool<byte>.Shared.Rent(FOOTER_BYTE_LEN);
-            line.Slice(_footerOffsetByte, FOOTER_BYTE_LEN).CopyTo(footer);
-
-            var offset = HEADER_BYTE_LEN;
-            for (int i = 0; i < DETAIL_COUNT; i++)
-            {
-                line.Slice(offset, DETAIL_BYTE_LEN).CopyTo(detail);
-
-                var r = new RowStruct(headerID, i, header, detail, footer);
-                r.Export(output, _comma, _newLine);
-
-                offset += DETAIL_BYTE_LEN;
-
-            }
-
-            ArrayPool<byte>.Shared.Return(header);
-            ArrayPool<byte>.Shared.Return(detail);
-            ArrayPool<byte>.Shared.Return(footer);
-        }
-
-        public struct RowStruct
-        {
-            readonly int _headerID;
-            readonly int _detailID;
-
-            readonly ReadOnlyMemory<byte> _header;
-            readonly ReadOnlyMemory<byte> _detail;
-            readonly ReadOnlyMemory<byte> _footer;
-
-            public RowStruct(int headerID, int detailID, ReadOnlyMemory<byte> header, ReadOnlyMemory<byte> detail, ReadOnlyMemory<byte> footer)
-            {
-                _headerID = headerID;
-                _detailID = detailID;
-                _header = header;
-                _detail = detail;
-                _footer = footer;
-            }
-
-            ReadOnlySpan<byte> HeaderID => Encoding.ASCII.GetBytes($"{_headerID}");
-            ReadOnlySpan<byte> DetailID => Encoding.ASCII.GetBytes($"{_detailID:000}");
-            ReadOnlySpan<byte> Header01 => _header.Slice(9, 8).Span;
-            ReadOnlySpan<byte> Header02 => _header.Slice(17, 14).Span;
-            ReadOnlySpan<byte> Header03 => _header.Slice(31, 10).Span;
-            ReadOnlySpan<byte> Header04 => _header.Slice(41, 4).Span;
-            ReadOnlySpan<byte> Header05 => _header.Slice(45, 6).Span;
-            ReadOnlySpan<byte> Header06 => _header.Slice(51, 6).Span;
-            ReadOnlySpan<byte> Header07 => _header.Slice(57, 12).Span;
-            ReadOnlySpan<byte> Data => _detail[..DETAIL_BYTE_LEN].Span;
-            ReadOnlySpan<byte> Footer01 => _footer[..10].Span;
-            ReadOnlySpan<byte> Footer02 => _footer.Slice(10, 18).Span;
-            ReadOnlySpan<byte> Footer03 => _footer.Slice(28, 4).Span;
-            ReadOnlySpan<byte> Footer04 => _footer.Slice(32, 6).Span;
-            ReadOnlySpan<byte> Footer05 => _footer.Slice(38, 16).Span;
-            ReadOnlySpan<byte> Footer06 => _footer.Slice(54, 10).Span;
-            ReadOnlySpan<byte> Footer07 => _footer.Slice(64, 6).Span;
-            ReadOnlySpan<byte> Footer08 => _footer.Slice(70, 8).Span;
-
-            public void Export(Stream output, ReadOnlySpan<byte> comma, ReadOnlySpan<byte> newLine)
-            {
-                output.Write(HeaderID);
-                output.Write(comma);
-                output.Write(DetailID);
-                output.Write(comma);
-                output.Write(Data);
-                output.Write(comma);
-                output.Write(Header01);
-                output.Write(Header02);
-                output.Write(Header03);
-                output.Write(Header04);
-                output.Write(Header05);
-                output.Write(Header06);
-                output.Write(Header07);
-                output.Write(Footer01);
-                output.Write(Footer02);
-                output.Write(Footer03);
-                output.Write(Footer04);
-                output.Write(Footer05);
-                output.Write(Footer06);
-                output.Write(newLine);
-            }
-        }
-        #endregion
-
-        #region
-//        [Benchmark]
-//        public async Task SequenceReaderDisposeAsync()
-//        {
-//            var output = new MemoryStream();
-//            _lineNum = 0;
-//            var input = new MemoryStream(_input);
-
-//            var pipe = new Pipe();
-//            var writing = FillPipeAsync(input, pipe.Writer);
-//            var reading = ReadPipe5Async(output, pipe.Reader);
-//            await Task.WhenAll(writing, reading);
-//#if DEBUG
-//            Console.WriteLine(_enc.GetString(output.ToArray()));
-//            File.WriteAllBytes("output.txt", output.ToArray());
-//            Console.WriteLine();
-//            Console.WriteLine(_lineNum);
-//#endif
-//            // https://docs.microsoft.com/ja-jp/dotnet/standard/io/pipelines
-//            // https://qiita.com/skitoy4321/items/0fc4dc72bc50dabba92b
-//        }
-
-//        private async Task ReadPipe5Async(Stream output, PipeReader reader)
-//        {
-//            while (true)
-//            {
-//                var result = await reader.ReadAsync();
-//                var buffer = result.Buffer;
-//                ProcessLine5(output, ref buffer);
-//                reader.AdvanceTo(buffer.Start, buffer.End);
-//                if (result.IsCompleted)
-//                    break;
-//            }
-//            reader.Complete();
-//        }
-
-//        private void ProcessLine5(Stream output, ref ReadOnlySequence<byte> buffer)
-//        {
-//            var sequenceReader = new SequenceReader<byte>(buffer);
-//            while (!sequenceReader.End)
-//            {
-//                while (sequenceReader.TryReadTo(out ReadOnlySpan<byte> line, CRLF))
-//                    Export5(output, line);
-
-//                buffer = buffer.Slice(sequenceReader.Position);
-//                sequenceReader.Advance(buffer.Length);
-//            }
-//        }
-
-//        private void Export5(Stream output, ReadOnlySpan<byte> line)
-//        {
-//            _lineNum++;
-//            if (!int.TryParse(_enc.GetString(line[..9]), out var headerID))
-//                throw new ApplicationException("Could not be converted to int.");
-
-//            var offset = HEADER_BYTE_LEN;
-//            for (int i = 0; i < DETAIL_COUNT; i++)
-//            {
-//                using var r = new RowDispose(headerID, i,
-//                    line[..HEADER_BYTE_LEN],
-//                    line.Slice(offset, DETAIL_BYTE_LEN),
-//                    line.Slice(_footerOffsetByte, FOOTER_BYTE_LEN));
-//                r.Export(output, _comma, _newLine);
-
-//                offset += DETAIL_BYTE_LEN;
-//            }
-
-//        }
-
-//        public struct RowDispose : IDisposable
-//        {
-//            readonly int _headerID;
-//            readonly int _detailID;
-
-//            readonly byte[] _header;
-//            readonly byte[] _detail;
-//            readonly byte[] _footer;
-
-//            public RowDispose(int headerID, int detailID, ReadOnlySpan<byte> header, ReadOnlySpan<byte> detail, ReadOnlySpan<byte> footer)
-//            {
-//                _header = ArrayPool<byte>.Shared.Rent(HEADER_BYTE_LEN);
-//                _detail = ArrayPool<byte>.Shared.Rent(DETAIL_BYTE_LEN);
-//                _footer = ArrayPool<byte>.Shared.Rent(FOOTER_BYTE_LEN);
-
-//                _headerID = headerID;
-//                _detailID = detailID;
-//                header.CopyTo(_header);
-//                detail.CopyTo(_detail);
-//                footer.CopyTo(_footer);
-//            }
-
-//            public void Dispose()
-//            {
-//                ArrayPool<byte>.Shared.Return(_header);
-//                ArrayPool<byte>.Shared.Return(_detail);
-//                ArrayPool<byte>.Shared.Return(_footer);
-//                GC.SuppressFinalize(this);
-//            }
-
-//            ReadOnlySpan<byte> HeaderID => Encoding.ASCII.GetBytes($"{_headerID}");
-//            ReadOnlySpan<byte> DetailID => Encoding.ASCII.GetBytes($"{_detailID:000}");
-//            ReadOnlySpan<byte> Header01 => _header.AsSpan().Slice(9, 8);
-//            ReadOnlySpan<byte> Header02 => _header.AsSpan().Slice(17, 14);
-//            ReadOnlySpan<byte> Header03 => _header.AsSpan().Slice(31, 10);
-//            ReadOnlySpan<byte> Header04 => _header.AsSpan().Slice(41, 4);
-//            ReadOnlySpan<byte> Header05 => _header.AsSpan().Slice(45, 6);
-//            ReadOnlySpan<byte> Header06 => _header.AsSpan().Slice(51, 6);
-//            ReadOnlySpan<byte> Header07 => _header.AsSpan().Slice(57, 12);
-//            ReadOnlySpan<byte> Data => _detail[..DETAIL_BYTE_LEN];
-//            ReadOnlySpan<byte> Footer01 => _footer[..10];
-//            ReadOnlySpan<byte> Footer02 => _footer.AsSpan().Slice(10, 18);
-//            ReadOnlySpan<byte> Footer03 => _footer.AsSpan().Slice(28, 4);
-//            ReadOnlySpan<byte> Footer04 => _footer.AsSpan().Slice(32, 6);
-//            ReadOnlySpan<byte> Footer05 => _footer.AsSpan().Slice(38, 16);
-//            ReadOnlySpan<byte> Footer06 => _footer.AsSpan().Slice(54, 10);
-//            ReadOnlySpan<byte> Footer07 => _footer.AsSpan().Slice(64, 6);
-//            ReadOnlySpan<byte> Footer08 => _footer.AsSpan().Slice(70, 8);
-
-//            public void Export(Stream output, ReadOnlySpan<byte> comma, ReadOnlySpan<byte> newLine)
-//            {
-//                output.Write(HeaderID);
-//                output.Write(comma);
-//                output.Write(DetailID);
-//                output.Write(comma);
-//                output.Write(Data);
-//                output.Write(comma);
-//                output.Write(Header01);
-//                output.Write(Header02);
-//                output.Write(Header03);
-//                output.Write(Header04);
-//                output.Write(Header05);
-//                output.Write(Header06);
-//                output.Write(Header07);
-//                output.Write(Footer01);
-//                output.Write(Footer02);
-//                output.Write(Footer03);
-//                output.Write(Footer04);
-//                output.Write(Footer05);
-//                output.Write(Footer06);
-//                output.Write(newLine);
-//            }
-//        }
-        #endregion
-
-        #region
+        #region PipeLine-SequencePosition
         [Benchmark]
-        public async Task SequencePositionReadOnlyStructAsync()
+        public async Task Pipe_SeqPos_ClassAsync()
         {
-            var output = new MemoryStream();
-            _lineNum = 0;
             var input = new MemoryStream(_input);
+            var output = new MemoryStream();
 
             var pipe = new Pipe();
             var writing = FillPipeAsync(input, pipe.Writer);
-            var reading = ReadPipe6Async(output, pipe.Reader);
+            var reading = ReadSeqPositionClassAsync(output, pipe.Reader);
             await Task.WhenAll(writing, reading);
 #if DEBUG
             Console.WriteLine(_enc.GetString(output.ToArray()));
             File.WriteAllBytes("output.txt", output.ToArray());
             Console.WriteLine();
-            Console.WriteLine(_lineNum);
 #endif
-            // https://docs.microsoft.com/ja-jp/dotnet/standard/io/pipelines
-            // https://qiita.com/skitoy4321/items/0fc4dc72bc50dabba92b
         }
 
-        private async Task ReadPipe6Async(Stream output, PipeReader reader)
+        private async Task ReadSeqPositionClassAsync(Stream output, PipeReader reader)
         {
             while (true)
             {
@@ -912,12 +208,12 @@ namespace ImportingProcess
                 SequencePosition? position;
                 do
                 {
-                    position = buffer.PositionOf((byte)'\n');
+                    position = buffer.PositionOf(_crlf.Last());
                     if (position != null)
                     {
                         try
                         {
-                            Export6(output, buffer.Slice(0, position.Value));
+                            ParseReadOnlySequenceClass(output, buffer.Slice(0, position.Value));
                         }
                         catch (Exception ex)
                         {
@@ -934,41 +230,264 @@ namespace ImportingProcess
             reader.Complete();
         }
 
-        private void Export6(Stream output, ReadOnlySequence<byte> segment)
+        private void ParseReadOnlySequenceClass(Stream output, in ReadOnlySequence<byte> lineSegment)
         {
-            var line = segment.IsSingleSegment
-                ? segment.First.Span
-                : segment.ToArray().AsSpan();
+            var line = lineSegment.IsSingleSegment
+                ? lineSegment.First
+                : lineSegment.ToArray();
 
-            _lineNum++;
-            if (!int.TryParse(_enc.GetString(line[..9]), out var headerID))
+            if (!int.TryParse(_enc.GetString(line[..9].Span), out var headerID))
                 throw new ApplicationException("Could not be converted to int.");
 
             var offset = HEADER_BYTE_LEN;
             for (int i = 0; i < DETAIL_COUNT; i++)
             {
-                var r = new RowReadOnlyStruct(
+                var r = new RowClass(
                     headerID,
                     i,
                     line[..HEADER_BYTE_LEN],
                     line.Slice(offset, DETAIL_BYTE_LEN),
                     line.Slice(_footerOffsetByte, FOOTER_BYTE_LEN)
                 );
-                r.Export(output, _comma, _newLine);
+                r.Export(output, _comma, _crlf);
                 offset += DETAIL_BYTE_LEN;
             }
         }
+        #endregion
 
-        public readonly ref struct RowReadOnlyStruct
+        #region PipeLine-SequenceReader
+        [Benchmark]
+        public async Task Pipe_SeqReader_ClassAsync()
         {
-            readonly int _headerID;
-            readonly int _detailID;
+            var input = new MemoryStream(_input);
+            var output = new MemoryStream();
 
+            var pipe = new Pipe();
+            var writing = FillPipeAsync(input, pipe.Writer);
+            var reading = ReadPipeSeqReaderClassAsync(output, pipe.Reader);
+            await Task.WhenAll(writing, reading);
+#if DEBUG
+            Console.WriteLine(_enc.GetString(output.ToArray()));
+            File.WriteAllBytes("output.txt", output.ToArray());
+            Console.WriteLine();
+#endif
+            // https://docs.microsoft.com/ja-jp/dotnet/standard/io/pipelines
+            // https://qiita.com/skitoy4321/items/0fc4dc72bc50dabba92b
+        }
+
+        private async Task ReadPipeSeqReaderClassAsync(Stream output, PipeReader reader)
+        {
+            while (true)
+            {
+                var result = await reader.ReadAsync();
+                var buffer = result.Buffer;
+                ProcessSeqReaderClass(output, ref buffer);
+                reader.AdvanceTo(buffer.Start, buffer.End);
+                if (result.IsCompleted)
+                    break;
+            }
+            reader.Complete();
+        }
+
+        private void ProcessSeqReaderClass(Stream output, ref ReadOnlySequence<byte> buffer)
+        {
+            var sequenceReader = new SequenceReader<byte>(buffer);
+            while (!sequenceReader.End)
+            {
+                while (sequenceReader.TryReadTo(out ReadOnlySpan<byte> line, _crlf))
+                    ParseReadOnlySpanClass(output, line);
+
+                buffer = buffer.Slice(sequenceReader.Position);
+                sequenceReader.Advance(buffer.Length);
+            }
+        }
+
+        private void ParseReadOnlySpanClass(Stream output, in ReadOnlySpan<byte> line)
+        {
+            if (!int.TryParse(_enc.GetString(line[..9]), out var headerID))
+                throw new ApplicationException("Could not be converted to int.");
+
+            Span<byte> header = stackalloc byte[HEADER_BYTE_LEN];
+            Span<byte> detail = stackalloc byte[DETAIL_BYTE_LEN];
+            Span<byte> footer = stackalloc byte[FOOTER_BYTE_LEN];
+
+            line[..HEADER_BYTE_LEN].CopyTo(header);
+            line.Slice(_footerOffsetByte, FOOTER_BYTE_LEN).CopyTo(footer);
+
+            var offset = HEADER_BYTE_LEN;
+            for (int i = 0; i < DETAIL_COUNT; i++)
+            {
+                line.Slice(offset, DETAIL_BYTE_LEN).CopyTo(detail);
+                var r = new RowStruct(
+                    headerID,
+                    i,
+                    header,
+                    detail,
+                    footer
+                );
+                r.Export(output, _comma, _crlf);
+
+                offset += DETAIL_BYTE_LEN;
+
+            }
+        }
+        #endregion
+
+        #region PipeLine-SequencePosition
+        [Benchmark]
+        public async Task Pipe_SeqPos_StructAsync()
+        {
+            var input = new MemoryStream(_input);
+            var output = new MemoryStream();
+
+            var pipe = new Pipe();
+            var writing = FillPipeAsync(input, pipe.Writer);
+            var reading = ReadSeqPositionStructAsync(output, pipe.Reader);
+            await Task.WhenAll(writing, reading);
+#if DEBUG
+            Console.WriteLine(_enc.GetString(output.ToArray()));
+            File.WriteAllBytes("output.txt", output.ToArray());
+            Console.WriteLine();
+#endif
+        }
+
+        private async Task ReadSeqPositionStructAsync(Stream output, PipeReader reader)
+        {
+            while (true)
+            {
+                var result = await reader.ReadAsync();
+                var buffer = result.Buffer;
+                SequencePosition? position;
+                do
+                {
+                    position = buffer.PositionOf(_crlf.Last());
+                    if (position != null)
+                    {
+                        try
+                        {
+                            ParseReadOnlySequenceStruct(output, buffer.Slice(0, position.Value));
+                        }
+                        catch (Exception ex)
+                        {
+                            reader.Complete(ex);
+                            return;
+                        }
+                        buffer = buffer.Slice(buffer.GetPosition(1, position.Value));
+                    }
+                } while (position != null);
+                reader.AdvanceTo(buffer.Start, buffer.End);
+                if (result.IsCompleted)
+                    break;
+            }
+            reader.Complete();
+        }
+
+        private void ParseReadOnlySequenceStruct(Stream output, in ReadOnlySequence<byte> lineSegment)
+        {
+            var line = lineSegment.IsSingleSegment
+                ? lineSegment.First.Span
+                : lineSegment.ToArray().AsSpan();
+
+            if (!int.TryParse(_enc.GetString(line[..9]), out var headerID))
+                throw new ApplicationException("Could not be converted to int.");
+
+            var offset = HEADER_BYTE_LEN;
+            for (int i = 0; i < DETAIL_COUNT; i++)
+            {
+                var r = new RowStruct(
+                    headerID,
+                    i,
+                    line[..HEADER_BYTE_LEN],
+                    line.Slice(offset, DETAIL_BYTE_LEN),
+                    line.Slice(_footerOffsetByte, FOOTER_BYTE_LEN)
+                );
+                r.Export(output, _comma, _crlf);
+                offset += DETAIL_BYTE_LEN;
+            }
+        }
+        #endregion
+
+        #region PipeLine-SequenceReader
+        [Benchmark]
+        public async Task Pipe_SeqReader_StructAsync()
+        {
+            var input = new MemoryStream(_input);
+            var output = new MemoryStream();
+
+            var pipe = new Pipe();
+            var writing = FillPipeAsync(input, pipe.Writer);
+            var reading = ReadPipeSeqReaderAsync(output, pipe.Reader);
+            await Task.WhenAll(writing, reading);
+#if DEBUG
+            Console.WriteLine(_enc.GetString(output.ToArray()));
+            File.WriteAllBytes("output.txt", output.ToArray());
+            Console.WriteLine();
+#endif
+            // https://docs.microsoft.com/ja-jp/dotnet/standard/io/pipelines
+            // https://qiita.com/skitoy4321/items/0fc4dc72bc50dabba92b
+        }
+
+        private async Task ReadPipeSeqReaderAsync(Stream output, PipeReader reader)
+        {
+            while (true)
+            {
+                var result = await reader.ReadAsync();
+                var buffer = result.Buffer;
+                ProcessSeqReaderStruct(output, ref buffer);
+                reader.AdvanceTo(buffer.Start, buffer.End);
+                if (result.IsCompleted)
+                    break;
+            }
+            reader.Complete();
+        }
+
+        private void ProcessSeqReaderStruct(Stream output, ref ReadOnlySequence<byte> buffer)
+        {
+            var sequenceReader = new SequenceReader<byte>(buffer);
+            while (!sequenceReader.End)
+            {
+                while (sequenceReader.TryReadTo(out ReadOnlySpan<byte> line, _crlf))
+                    ParseReadOnlySpanStruct(output, line);
+
+                buffer = buffer.Slice(sequenceReader.Position);
+                sequenceReader.Advance(buffer.Length);
+            }
+        }
+
+        private void ParseReadOnlySpanStruct(Stream output, in ReadOnlySpan<byte> line)
+        {
+            if (!int.TryParse(_enc.GetString(line[..9]), out var headerID))
+                throw new ApplicationException("Could not be converted to int.");
+
+            var offset = HEADER_BYTE_LEN;
+            for (int i = 0; i < DETAIL_COUNT; i++)
+            {
+                var r = new RowStruct(
+                    headerID,
+                    i,
+                    line[..HEADER_BYTE_LEN],
+                    line.Slice(offset, DETAIL_BYTE_LEN),
+                    line.Slice(_footerOffsetByte, FOOTER_BYTE_LEN)
+                );
+                r.Export(output, _comma, _crlf);
+
+                offset += DETAIL_BYTE_LEN;
+
+            }
+        }
+        #endregion
+
+        #region Row struct ver.
+        public readonly ref struct RowStruct
+        {
             readonly ReadOnlySpan<byte> _header;
             readonly ReadOnlySpan<byte> _detail;
             readonly ReadOnlySpan<byte> _footer;
 
-            public RowReadOnlyStruct(int headerID, int detailID, ReadOnlySpan<byte> header, ReadOnlySpan<byte> detail, ReadOnlySpan<byte> footer)
+            readonly int _headerID;
+            readonly int _detailID;
+
+            public RowStruct(int headerID, int detailID, ReadOnlySpan<byte> header, ReadOnlySpan<byte> detail, ReadOnlySpan<byte> footer)
             {
                 _headerID = headerID;
                 _detailID = detailID;
@@ -996,7 +515,7 @@ namespace ImportingProcess
             ReadOnlySpan<byte> Footer07 => _footer.Slice(64, 6);
             ReadOnlySpan<byte> Footer08 => _footer.Slice(70, 8);
 
-            public void Export(Stream output, ReadOnlySpan<byte> comma, ReadOnlySpan<byte> newLine)
+            public void Export(Stream output, in ReadOnlySpan<byte> comma, in ReadOnlySpan<byte> crlf)
             {
                 output.Write(HeaderID);
                 output.Write(comma);
@@ -1017,80 +536,9 @@ namespace ImportingProcess
                 output.Write(Footer04);
                 output.Write(Footer05);
                 output.Write(Footer06);
-                output.Write(newLine);
-            }
-        }
-        #endregion
-
-        #region
-        [Benchmark]
-        public async Task SequenceReaderReadOnlyStructAsync()
-        {
-            var output = new MemoryStream();
-            _lineNum = 0;
-            var input = new MemoryStream(_input);
-
-            var pipe = new Pipe();
-            var writing = FillPipeAsync(input, pipe.Writer);
-            var reading = ReadPipe7Async(output, pipe.Reader);
-            await Task.WhenAll(writing, reading);
-#if DEBUG
-            Console.WriteLine(_enc.GetString(output.ToArray()));
-            File.WriteAllBytes("output.txt", output.ToArray());
-            Console.WriteLine();
-            Console.WriteLine(_lineNum);
-#endif
-            // https://docs.microsoft.com/ja-jp/dotnet/standard/io/pipelines
-            // https://qiita.com/skitoy4321/items/0fc4dc72bc50dabba92b
-        }
-
-        private async Task ReadPipe7Async(Stream output, PipeReader reader)
-        {
-            while (true)
-            {
-                var result = await reader.ReadAsync();
-                var buffer = result.Buffer;
-                ProcessLine4(output, ref buffer);
-                reader.AdvanceTo(buffer.Start, buffer.End);
-                if (result.IsCompleted)
-                    break;
-            }
-            reader.Complete();
-        }
-
-        private void ProcessLine7(Stream output, ref ReadOnlySequence<byte> buffer)
-        {
-            var sequenceReader = new SequenceReader<byte>(buffer);
-            while (!sequenceReader.End)
-            {
-                while (sequenceReader.TryReadTo(out ReadOnlySpan<byte> line, CRLF))
-                    Export7(output, line);
-
-                buffer = buffer.Slice(sequenceReader.Position);
-                sequenceReader.Advance(buffer.Length);
-            }
-        }
-
-        private void Export7(Stream output, ReadOnlySpan<byte> line)
-        {
-            _lineNum++;
-            if (!int.TryParse(_enc.GetString(line[..9]), out var headerID))
-                throw new ApplicationException("Could not be converted to int.");
-
-            var offset = HEADER_BYTE_LEN;
-            for (int i = 0; i < DETAIL_COUNT; i++)
-            {
-                var r = new RowReadOnlyStruct(
-                    headerID,
-                    i,
-                    line[..HEADER_BYTE_LEN],
-                    line.Slice(offset, DETAIL_BYTE_LEN),
-                    line.Slice(_footerOffsetByte, FOOTER_BYTE_LEN)
-                );
-                r.Export(output, _comma, _newLine);
-
-                offset += DETAIL_BYTE_LEN;
-
+                output.Write(Footer07);
+                output.Write(Footer08);
+                output.Write(crlf);
             }
         }
         #endregion

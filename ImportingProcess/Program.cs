@@ -6,11 +6,9 @@ using System.Text;
 #if DEBUG
 //var test = new Import01();
 var test = new Import02();
-//await test.ListAsync();
-//await test.RowByteAsync();
-//await test.RowMemoryAsync();
-//await test.PipelinesAsync();
-await test.Pipelines3Async();
+await test.ReadStream();
+await test.Pipeline_SeqPositionAsync();
+await test.PipeLine_SeqReaderAsync();
 Console.WriteLine("Press any key...");
 Console.ReadLine();
 #else
