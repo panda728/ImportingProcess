@@ -1,16 +1,9 @@
 ﻿using BenchmarkDotNet.Attributes;
-using System;
 using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using System.IO.Pipelines;
-using System.Linq;
-using System.Net.Sockets;
 using System.Text;
-using System.Threading.Tasks;
 
-namespace ImportingProcess
+namespace PipeBanchmark
 {
     [MarkdownExporterAttribute.GitHub]
     [ShortRunJob]
@@ -33,10 +26,6 @@ namespace ImportingProcess
         const int HEADER_BYTE_LEN = 9 + 30 * 2;
         const int DETAIL_BYTE_LEN = 10;
         const int FOOTER_BYTE_LEN = 39 * 2;
-
-        readonly int _totalLengthByte = HEADER_BYTE_LEN + DETAIL_BYTE_LEN * DETAIL_COUNT + FOOTER_BYTE_LEN + 2;
-        readonly int _footerOffsetByte = HEADER_BYTE_LEN + DETAIL_BYTE_LEN * DETAIL_COUNT;
-        readonly int _footerEndByte = HEADER_BYTE_LEN + DETAIL_BYTE_LEN * DETAIL_COUNT + FOOTER_BYTE_LEN;
         #endregion
 
         readonly byte[] _crlf = Encoding.ASCII.GetBytes("\r\n");
@@ -146,7 +135,7 @@ namespace ImportingProcess
 
         #region Pipe_SequencePosition
         [Benchmark]
-        public async Task Pipe_MemoryAsync()
+        public async Task Pipe_SeqPos_MemoryAsync()
         {
             var input = new MemoryStream(_input);
             var output = new MemoryStream();
@@ -217,21 +206,12 @@ namespace ImportingProcess
                 ? lineSegment.First
                 : lineSegment.ToArray();
 
-            var offset = HEADER_BYTE_LEN;
-            for (int i = 0; i < DETAIL_COUNT; i++)
-            {
-                var r = new RowMemory(
-                    line[..HEADER_BYTE_LEN],
-                    line.Slice(offset, DETAIL_BYTE_LEN),
-                    line.Slice(_footerOffsetByte, FOOTER_BYTE_LEN)
-                );
-                r.Export(output, _comma, _crlf);
-                offset += DETAIL_BYTE_LEN;
-            }
+            var r = new LineMemory(line);
+            r.Export(output, _comma, _crlf);
         }
 
         [Benchmark]
-        public async Task Pipe_StructAsync()
+        public async Task Pipe_SeqPos_StructAsync()
         {
             var input = new MemoryStream(_input);
             var output = new MemoryStream();
@@ -279,133 +259,130 @@ namespace ImportingProcess
                 ? lineSegment.First.Span
                 : lineSegment.ToArray().AsSpan();
 
-            var offset = HEADER_BYTE_LEN;
-            for (int i = 0; i < DETAIL_COUNT; i++)
-            {
-                var r = new RowStruct(
-                    line[..HEADER_BYTE_LEN],
-                    line.Slice(offset, DETAIL_BYTE_LEN),
-                    line.Slice(_footerOffsetByte, FOOTER_BYTE_LEN)
-                );
-                r.Export(output, _comma, _crlf);
-                offset += DETAIL_BYTE_LEN;
-            }
+            var r = new LineStruct(line);
+            r.Export(output, _comma, _crlf);
         }
         #endregion
 
         #region Row 
-        internal class RowMemory
+        public class LineMemory
         {
-            readonly ReadOnlyMemory<byte> _header;
-            readonly ReadOnlyMemory<byte> _detail;
-            readonly ReadOnlyMemory<byte> _footer;
+            public const int LENGTH = 249; // include CRLF
+            readonly ReadOnlyMemory<byte> _line;
 
-            public RowMemory(ReadOnlyMemory<byte> header, ReadOnlyMemory<byte> detail, ReadOnlyMemory<byte> footer)
+            public LineMemory(ReadOnlyMemory<byte> line)
             {
-                _header = header;
-                _detail = detail;
-                _footer = footer;
+                _line = line;
             }
 
-            ReadOnlySpan<byte> Header01 => _header[9..17].Span;
-            ReadOnlySpan<byte> Header02 => _header[17..31].Span;
-            ReadOnlySpan<byte> Header03 => _header[31..41].Span;
-            ReadOnlySpan<byte> Header04 => _header[41..45].Span;
-            ReadOnlySpan<byte> Header05 => _header[45..51].Span;
-            ReadOnlySpan<byte> Header06 => _header[51..57].Span;
-            ReadOnlySpan<byte> Header07 => _header[57..69].Span;
-            ReadOnlySpan<byte> Data => _detail[..DETAIL_BYTE_LEN].Span;
-            ReadOnlySpan<byte> Footer01 => _footer[..10].Span;
-            ReadOnlySpan<byte> Footer02 => _footer[10..28].Span;
-            ReadOnlySpan<byte> Footer03 => _footer[28..32].Span;
-            ReadOnlySpan<byte> Footer04 => _footer[32..38].Span;
-            ReadOnlySpan<byte> Footer05 => _footer[38..54].Span;
-            ReadOnlySpan<byte> Footer06 => _footer[54..64].Span;
-            ReadOnlySpan<byte> Footer07 => _footer[64..70].Span;
-            ReadOnlySpan<byte> Footer08 => _footer[70..78].Span;
+            public ReadOnlySpan<byte> Header01 => _line[9..17].Span;
+            public ReadOnlySpan<byte> Header02 => _line[17..31].Span;
+            public ReadOnlySpan<byte> Header03 => _line[31..41].Span;
+            public ReadOnlySpan<byte> Header04 => _line[41..45].Span;
+            public ReadOnlySpan<byte> Header05 => _line[45..51].Span;
+            public ReadOnlySpan<byte> Header06 => _line[51..57].Span;
+            public ReadOnlySpan<byte> Header07 => _line[57..69].Span;
+
+            public ReadOnlySpan<byte> Footer01 => _line[169..179].Span;
+            public ReadOnlySpan<byte> Footer02 => _line[179..197].Span;
+            public ReadOnlySpan<byte> Footer03 => _line[197..201].Span;
+            public ReadOnlySpan<byte> Footer04 => _line[201..207].Span;
+            public ReadOnlySpan<byte> Footer05 => _line[207..223].Span;
+            public ReadOnlySpan<byte> Footer06 => _line[223..233].Span;
+            public ReadOnlySpan<byte> Footer07 => _line[233..239].Span;
+            public ReadOnlySpan<byte> Footer08 => _line[239..247].Span;
+
+            public ReadOnlySpan<byte> GetDetail(int pos)
+                => _line.Slice(DETAIL_BYTE_LEN + (DETAIL_BYTE_LEN * pos), DETAIL_BYTE_LEN).Span;
+
 
             public void Export(Stream output, in ReadOnlySpan<byte> comma, in ReadOnlySpan<byte> crlf)
             {
-                output.Write(Data);
-                output.Write(comma);
-                output.Write(Header01);
-                output.Write(Header02);
-                output.Write(Header03);
-                output.Write(Header04);
-                output.Write(Header05);
-                output.Write(Header06);
-                output.Write(Header07);
-                output.Write(comma);
-                output.Write(Footer01);
-                output.Write(Footer02);
-                output.Write(Footer03);
-                output.Write(Footer04);
-                output.Write(Footer05);
-                output.Write(Footer06);
-                output.Write(Footer07);
-                output.Write(Footer08);
-                output.Write(crlf);
+                for (int i = 0; i < DETAIL_COUNT; i++)
+                {
+                    output.Write(GetDetail(i));
+                    output.Write(comma);
+                    output.Write(Header01);
+                    output.Write(Header02);
+                    output.Write(Header03);
+                    output.Write(Header04);
+                    output.Write(Header05);
+                    output.Write(Header06);
+                    output.Write(Header07);
+                    output.Write(comma);
+                    output.Write(Footer01);
+                    output.Write(Footer02);
+                    output.Write(Footer03);
+                    output.Write(Footer04);
+                    output.Write(Footer05);
+                    output.Write(Footer06);
+                    output.Write(Footer07);
+                    output.Write(Footer08);
+                    output.Write(crlf);
+                }
             }
         }
 
-        internal readonly ref struct RowStruct
+        readonly ref struct LineStruct
         {
-            readonly ReadOnlySpan<byte> _header;
-            readonly ReadOnlySpan<byte> _detail;
-            readonly ReadOnlySpan<byte> _footer;
+            public const int LENGTH = 249; // include CRLF
+            readonly ReadOnlySpan<byte> _line;
 
-            public RowStruct(ReadOnlySpan<byte> header, ReadOnlySpan<byte> detail, ReadOnlySpan<byte> footer)
+            public LineStruct(ReadOnlySpan<byte> line)
             {
-                _header = header;
-                _detail = detail;
-                _footer = footer;
+                _line = line;
             }
 
-            ReadOnlySpan<byte> Header01 => _header[9..17];
-            ReadOnlySpan<byte> Header02 => _header[17..31];
-            ReadOnlySpan<byte> Header03 => _header[31..41];
-            ReadOnlySpan<byte> Header04 => _header[41..45];
-            ReadOnlySpan<byte> Header05 => _header[45..51];
-            ReadOnlySpan<byte> Header06 => _header[51..57];
-            ReadOnlySpan<byte> Header07 => _header[57..69];
-            ReadOnlySpan<byte> Data => _detail[..DETAIL_BYTE_LEN];
-            ReadOnlySpan<byte> Footer01 => _footer[..10];
-            ReadOnlySpan<byte> Footer02 => _footer[10..28];
-            ReadOnlySpan<byte> Footer03 => _footer[28..32];
-            ReadOnlySpan<byte> Footer04 => _footer[32..38];
-            ReadOnlySpan<byte> Footer05 => _footer[38..54];
-            ReadOnlySpan<byte> Footer06 => _footer[54..64];
-            ReadOnlySpan<byte> Footer07 => _footer[64..70];
-            ReadOnlySpan<byte> Footer08 => _footer[70..78];
+            public readonly ReadOnlySpan<byte> Header01 => _line[9..17];
+            public readonly ReadOnlySpan<byte> Header02 => _line[17..31];
+            public readonly ReadOnlySpan<byte> Header03 => _line[31..41];
+            public readonly ReadOnlySpan<byte> Header04 => _line[41..45];
+            public readonly ReadOnlySpan<byte> Header05 => _line[45..51];
+            public readonly ReadOnlySpan<byte> Header06 => _line[51..57];
+            public readonly ReadOnlySpan<byte> Header07 => _line[57..69];
+            public readonly ReadOnlySpan<byte> Footer01 => _line[169..179];
+            public readonly ReadOnlySpan<byte> Footer02 => _line[179..197];
+            public readonly ReadOnlySpan<byte> Footer03 => _line[197..201];
+            public readonly ReadOnlySpan<byte> Footer04 => _line[201..207];
+            public readonly ReadOnlySpan<byte> Footer05 => _line[207..223];
+            public readonly ReadOnlySpan<byte> Footer06 => _line[223..233];
+            public readonly ReadOnlySpan<byte> Footer07 => _line[233..239];
+            public readonly ReadOnlySpan<byte> Footer08 => _line[239..247];
+
+            public readonly ReadOnlySpan<byte> GetDetail(int pos)
+                => _line.Slice(DETAIL_BYTE_LEN + (DETAIL_BYTE_LEN * pos), DETAIL_BYTE_LEN);
 
             public void Export(Stream output, in ReadOnlySpan<byte> comma, in ReadOnlySpan<byte> crlf)
             {
-                output.Write(Data);
-                output.Write(comma);
-                output.Write(Header01);
-                output.Write(Header02);
-                output.Write(Header03);
-                output.Write(Header04);
-                output.Write(Header05);
-                output.Write(Header06);
-                output.Write(Header07);
-                output.Write(comma);
-                output.Write(Footer01);
-                output.Write(Footer02);
-                output.Write(Footer03);
-                output.Write(Footer04);
-                output.Write(Footer05);
-                output.Write(Footer06);
-                output.Write(Footer07);
-                output.Write(Footer08);
-                output.Write(crlf);
+                for (int i = 0; i < DETAIL_COUNT; i++)
+                {
+                    output.Write(GetDetail(i));
+                    output.Write(comma);
+                    output.Write(Header01);
+                    output.Write(Header02);
+                    output.Write(Header03);
+                    output.Write(Header04);
+                    output.Write(Header05);
+                    output.Write(Header06);
+                    output.Write(Header07);
+                    output.Write(comma);
+                    output.Write(Footer01);
+                    output.Write(Footer02);
+                    output.Write(Footer03);
+                    output.Write(Footer04);
+                    output.Write(Footer05);
+                    output.Write(Footer06);
+                    output.Write(Footer07);
+                    output.Write(Footer08);
+                    output.Write(crlf);
+                }
             }
         }
         #endregion
 
         #region Pipe_SequenceReader
         [Benchmark]
-        public async Task Pipe_SeqReaderAsync()
+        public async Task Pipe_SeqReader_StructAsync()
         {
             var input = new MemoryStream(_input);
             var output = new MemoryStream();
@@ -445,25 +422,14 @@ namespace ImportingProcess
 
         private void OutputReadOnlySpan(Stream output, in ReadOnlySpan<byte> line)
         {
-            var offset = HEADER_BYTE_LEN;
-            var offsetEnd = HEADER_BYTE_LEN + DETAIL_BYTE_LEN;
-            for (int i = 0; i < DETAIL_COUNT; i++)
-            {
-                var r = new RowStruct(
-                    line[..HEADER_BYTE_LEN],
-                    line[offset..offsetEnd],
-                    line[_footerOffsetByte.._footerEndByte]
-                );
-                r.Export(output, _comma, _crlf);
-                offset += DETAIL_BYTE_LEN;
-                offsetEnd += DETAIL_BYTE_LEN;
-            }
+            var r = new LineStruct(line);
+            r.Export(output, _comma, _crlf);
         }
         #endregion
 
-        #region StreamRead
+        #region ReadStreamStruct
         [Benchmark]
-        public Task StreamRead()
+        public Task ReadStreamStruct()
         {
             var input = new MemoryStream(_input);
             var output = new MemoryStream();
@@ -473,29 +439,18 @@ namespace ImportingProcess
 
         private void Convert(Stream input, Stream output)
         {
-            Span<byte> buffer = stackalloc byte[_totalLengthByte];
+            Span<byte> buffer = stackalloc byte[LineStruct.LENGTH];
             for (; ; )
             {
-                var len = input.Read(buffer);
-                if (len == 0)
+                var length = input.Read(buffer);
+                if (length == 0)
                     break;
 
                 if (!buffer.EndsWith(_crlf))
                     throw new ApplicationException("\r not found");
 
-                var offset = HEADER_BYTE_LEN;
-                var offsetEnd = HEADER_BYTE_LEN + DETAIL_BYTE_LEN;
-                for (int i = 0; i < DETAIL_COUNT; i++)
-                {
-                    var r = new RowStruct(
-                        buffer[..HEADER_BYTE_LEN],
-                        buffer[offset..offsetEnd],
-                        buffer[_footerOffsetByte.._footerEndByte]
-                    );
-                    r.Export(output, _comma, _crlf);
-                    offset += DETAIL_BYTE_LEN;
-                    offsetEnd += DETAIL_BYTE_LEN;
-                }
+                var lineStuct = new LineStruct(buffer);
+                lineStuct.Export(output, _comma, _crlf);
             }
         }
         #endregion
