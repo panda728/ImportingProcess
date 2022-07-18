@@ -1,11 +1,9 @@
 # ImportingProcess
 Benchmark program to study the efficiency of file ingestion processes that may be found in Japanese business systems.
 
-|                     Method |      Mean |     Error |   StdDev | Ratio |      Gen 0 |      Gen 1 |     Gen 2 | Allocated |
-|--------------------------- |----------:|----------:|---------:|------:|-----------:|-----------:|----------:|----------:|
-|       UseStreamReaderAsync | 640.16 ms | 181.30 ms | 9.937 ms |  1.00 | 46000.0000 | 16000.0000 | 4000.0000 |    364 MB |
-|    Pipe_SeqPos_MemoryAsync |  88.21 ms |  22.57 ms | 1.237 ms |  0.14 |  1666.6667 |  1333.3333 | 1333.3333 |    129 MB |
-|    Pipe_SeqPos_StructAsync |  84.97 ms |  24.00 ms | 1.316 ms |  0.13 |  1714.2857 |  1571.4286 | 1571.4286 |    128 MB |
-| Pipe_SeqReader_StructAsync |  82.21 ms |  16.98 ms | 0.931 ms |  0.13 |  1714.2857 |  1571.4286 | 1571.4286 |    128 MB |
-|           ReadStreamStruct |  76.13 ms |  48.46 ms | 2.657 ms |  0.12 |  1571.4286 |  1571.4286 | 1571.4286 |    128 MB |
-
+|             Method |     Mean |     Error |   StdDev | Ratio |      Gen 0 |      Gen 1 |     Gen 2 | Allocated |
+|------------------- |---------:|----------:|---------:|------:|-----------:|-----------:|----------:|----------:|
+|  FirstVersionAsync | 845.9 ms | 520.17 ms | 28.51 ms |  1.00 | 53000.0000 | 17000.0000 | 4000.0000 |    386 MB |
+|      SpanCharAsync | 713.5 ms | 488.48 ms | 26.78 ms |  0.84 | 50000.0000 | 16000.0000 | 4000.0000 |    370 MB |
+|   YieldReturnAsync | 325.3 ms |  19.46 ms |  1.07 ms |  0.38 | 65000.0000 |  2000.0000 | 2000.0000 |    362 MB |
+| StringBuilderAsync | 371.0 ms | 184.73 ms | 10.13 ms |  0.44 | 88000.0000 |  2000.0000 | 2000.0000 |    452 MB |
